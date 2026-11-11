@@ -1,5 +1,7 @@
-"""Composição da API; as rotas de auditoria serão integradas por módulos."""
+"""Composição da API; novas rotas entram por routers isolados."""
+
 from fastapi import FastAPI
+from pagecheck.api.routes.pages import router as pages_router
 
 app = FastAPI(
     title="Page Check API",
@@ -7,7 +9,10 @@ app = FastAPI(
     version="0.1.0",
 )
 
-@app.get('/health', tags=['system'])
+app.include_router(pages_router)
+
+
+@app.get("/health", tags=["system"])
 def health() -> dict[str, str]:
-    """Endpoint inicial real, usado para validar a conexão com a interface."""
-    return {'status': 'ok', 'service': 'pagecheck-api'}
+    """Endpoint de saúde da API."""
+    return {"status": "ok", "service": "pagecheck-api"}
