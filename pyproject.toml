@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pagecheck"
+version = "0.1.0"
+description = "Auditoria deterministica de landing pages para marketing e GTM"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.30,<1",
+  "streamlit>=1.40,<2",
+  "httpx>=0.28,<1",
+  "pandas>=2.2,<3",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3,<10",
+  "ruff>=0.10,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pagecheck"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
