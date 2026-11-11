@@ -1,0 +1,18 @@
+
+# Detectar automaticamente arquivos de texto
+* text=auto
+
+# Padronizar arquivos de codigo e configuracao com LF
+*.py text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.lock text eol=lf
+*.sh text eol=lf
+
+# Arquivos de configuracao do repositorio
+.gitattributes text eol=lf
+.gitignore text eol=lf
+.env.example text eol=lf
