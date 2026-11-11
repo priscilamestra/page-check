@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Page Check — Fixture visual</title>
+<style>
+ body {font-family: sans-serif; margin: 20px;} .spacer {height: 1100px;}
+ img {width:180px;height:100px; display:block; margin:30px 0;}
+</style></head><body>
+<h1>Exemplo de auditoria de scroll</h1>
+<img id="top" alt="Imagem de início" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='100'%3E%3Crect width='180' height='100' fill='green'/%3E%3C/svg%3E">
+<div class="spacer"></div>
+<h2>Seção carregada durante o scroll</h2>
+<img id="late" loading="lazy" alt="Imagem com lazy loading" data-src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='100'%3E%3Crect width='180' height='100' fill='blue'/%3E%3C/svg%3E">
+<img id="broken" alt="Imagem inválida" src="data:image/png;base64,AAAAINVALID">
+<script>
+const late = document.getElementById('late');
+const io = new IntersectionObserver((entries) => {
+  for (const entry of entries) if (entry.isIntersecting) late.src = late.dataset.src;
+});
+io.observe(late);
+</script>
+</body></html>
