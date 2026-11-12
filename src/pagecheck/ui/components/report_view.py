@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from pagecheck.reporting.english_copy import check_copy, team_name
+from pagecheck.reporting.exports import findings_csv, zip_export
 from pagecheck.ui.components.report_data import (
     SEVERITY_LABELS, STATUS_LABELS, export_report_json, issue_counts, module_rows,
     screenshot_entries,
@@ -168,6 +169,18 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
             "Download JSON report", export_report_json(report),
             file_name="pagecheck_audit.json", mime="application/json",
         )
-        st.caption("Raw data can include original source messages; all primary controls are in English.")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                "Download findings CSV", findings_csv(report),
+                file_name="pagecheck_findings.csv", mime="text/csv",
+            )
+        with col2:
+            st.download_button(
+                "Download HTML report + screenshots (ZIP)", zip_export(report, root),
+                file_name="pagecheck_report.zip", mime="application/zip",
+            )
+        st.caption("Reports can contain URLs and data supplied during the audit. "
+                   "Files stay local unless you choose to share them.")
         with st.expander("Raw consolidated JSON"):
             st.json(report, expanded=False)

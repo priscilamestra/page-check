@@ -53,6 +53,32 @@ def _page_live_report(api_url: str, *, url: str, niche: str, objective: str,
     return validate_report(result)
 
 
+def _save_history(api_url: str, report: dict) -> str:
+    try:
+        response = httpx.post(f"{api_url}/v1/history", json=report, timeout=15.0)
+        response.raise_for_status()
+        return str(response.json()["audit_id"])
+    except (httpx.HTTPError, ValueError, KeyError) as exc:
+        raise ValueError("The audit ran, but it could not be saved in local history.") from exc
+
+
+def _history_items(api_url: str) -> list[dict]:
+    response = httpx.get(f"{api_url}/v1/history", params={"limit": 30}, timeout=5.0)
+    response.raise_for_status()
+    return response.json()["items"]
+
+
+def _load_history(api_url: str, audit_id: str) -> dict:
+    response = httpx.get(f"{api_url}/v1/history/{audit_id}", timeout=10.0)
+    response.raise_for_status()
+    return validate_report(response.json())
+
+
+def _delete_history(api_url: str, audit_id: str) -> None:
+    response = httpx.delete(f"{api_url}/v1/history/{audit_id}", timeout=10.0)
+    response.raise_for_status()
+
+
 def render_app() -> None:
     st.set_page_config(page_title="Page Check", page_icon="🔎", layout="wide")
     st.title("Page Check")
@@ -74,6 +100,7 @@ def render_app() -> None:
                 try:
                     st.session_state["pagecheck_report"] = local_demo_report(ROOT)
                     st.session_state["pagecheck_origin"] = "Sample data · not a live audit"
+                    st.session_state.pop("pagecheck_history_notice", None)
                 except (FileNotFoundError, ValueError) as exc:
                     st.error(str(exc))
 
@@ -130,6 +157,13 @@ def render_app() -> None:
                         "Live HTML audit · visual evidence captured (limited)" if visual_done
                         else "Live HTML audit · visual checks not verified"
                     )
+                    try:
+                        saved_id = _save_history(api_url, st.session_state["pagecheck_report"])
+                        st.session_state["pagecheck_history_notice"] = (
+                            f"Audit saved to local history ({saved_id[:8]})."
+                        )
+                    except ValueError as exc:
+                        st.session_state["pagecheck_history_notice"] = str(exc)
                 except ValueError as exc:
                     st.error(str(exc))
 
@@ -141,8 +175,51 @@ def render_app() -> None:
                     raise ValueError("Choose a JSON report first.")
                 st.session_state["pagecheck_report"] = parse_uploaded_report(uploaded.getvalue())
                 st.session_state["pagecheck_origin"] = "Imported report"
+                st.session_state.pop("pagecheck_history_notice", None)
             except ValueError as exc:
                 st.error(str(exc))
+
+    with st.expander("Saved audits · local history"):
+        st.caption("Saved on this computer. Opening a report does not run the audit again.")
+        try:
+            history = _history_items(api_url)
+        except (httpx.HTTPError, ValueError, KeyError):
+            history = []
+            st.caption("History is unavailable. Check that the local FastAPI server is running.")
+        if not history:
+            st.caption("No saved audits yet.")
+        else:
+            choices = {item["id"]: item for item in history}
+            choice = st.selectbox(
+                "Choose a saved audit", options=list(choices),
+                format_func=lambda audit_id: (
+                    f"{choices[audit_id]['created_at']} · "
+                    f"{choices[audit_id]['requested_url']} · "
+                    f"{choices[audit_id]['status']}"
+                ),
+                key="pagecheck_selected_history",
+            )
+            if st.button("Open saved audit"):
+                try:
+                    st.session_state["pagecheck_report"] = _load_history(api_url, choice)
+                    st.session_state["pagecheck_origin"] = "Saved audit · local history"
+                    st.session_state.pop("pagecheck_history_notice", None)
+                    st.rerun()
+                except (httpx.HTTPError, ValueError, KeyError) as exc:
+                    st.error(f"Could not open saved audit: {exc}")
+            with st.expander("Delete saved audit"):
+                st.caption("This permanently deletes the selected saved report and its copied screenshots.")
+                confirm = st.checkbox("I understand this cannot be undone", key=f"pagecheck_history_delete_{choice}")
+                if st.button("Delete selected audit", disabled=not confirm):
+                    try:
+                        _delete_history(api_url, choice)
+                        st.session_state.pop("pagecheck_history_notice", None)
+                        st.rerun()
+                    except httpx.HTTPError as exc:
+                        st.error(f"Could not delete saved audit: {exc}")
+
+    if st.session_state.get("pagecheck_history_notice"):
+        st.caption(st.session_state["pagecheck_history_notice"])
 
     report = st.session_state.get("pagecheck_report")
     if isinstance(report, dict):
