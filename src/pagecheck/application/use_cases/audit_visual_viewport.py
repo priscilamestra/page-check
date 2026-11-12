@@ -6,7 +6,7 @@ Não abre URLs e não altera políticas de rede. A coleta segura do navegador
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from PIL import Image
 from playwright.sync_api import Page
@@ -19,7 +19,10 @@ from pagecheck.reporting.annotations.findings import build_image_findings
 from pagecheck.reporting.annotations.overlay import annotate_screenshot, write_annotation_manifest
 
 
-def audit_visual_viewport(page: Page, *, output_dir: Path | str) -> dict[str, Any]:
+def audit_visual_viewport(
+    page: Page, *, output_dir: Path | str,
+    blocked_urls: Callable[[], set[str]] | None = None,
+) -> dict[str, Any]:
     """Produz screenshot, evidências geométricas e marcadores por viewport.
 
     Para capturas full-page com overflow horizontal, o PNG pode ser mais
@@ -28,6 +31,17 @@ def audit_visual_viewport(page: Page, *, output_dir: Path | str) -> dict[str, An
     """
     directory = Path(output_dir)
     visual = inspect_rendered_page(page, screenshot_dir=directory)
+    # Routes denied by our browser policy are not evidence that the origin site
+    # serves a broken image. Downgrade those images BEFORE making annotations.
+    blocked = blocked_urls() if blocked_urls is not None else set()
+    for image in visual["images"]:
+        if image.get("src") in blocked:
+            image["status"] = "not_verified"
+            image["loaded_after_scroll"] = False
+    visual["broken_image_count"] = sum(i["status"] == "broken" for i in visual["images"])
+    visual["not_verified_image_count"] = sum(
+        i["status"] == "not_verified" for i in visual["images"]
+    )
     layout = collect_layout_observations(page)
     findings = (build_image_findings(visual) +
                 build_image_quality_findings(layout) +

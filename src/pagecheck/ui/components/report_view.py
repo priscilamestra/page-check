@@ -29,13 +29,17 @@ def _score(value: object) -> str:
     return "Not verified"
 
 
-def _state_counts(state: dict) -> tuple[int, int]:
+def _state_counts(state: dict) -> tuple[int, int, int]:
     engine_states = state.get("engines") or {}
     visual_states = state.get("visuals") or {}
     all_states = [state.get("seo"), state.get("conversion"),
                   *(engine_states.values() if isinstance(engine_states, dict) else []),
                   *(visual_states.values() if isinstance(visual_states, dict) else [])]
-    return (sum(s == "completed" for s in all_states), len(all_states))
+    return (
+        sum(s == "completed" for s in all_states),
+        sum(s == "partial" for s in all_states),
+        sum(s == "not_verified" for s in all_states),
+    )
 
 
 def render_report(report: dict[str, Any], *, root: Path) -> None:
@@ -49,9 +53,10 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
         st.caption(f"Content language: {labels.get(language, language)}"
                    + (" · Target keywords: " + ", ".join(map(str, keywords)) if keywords else ""))
     if report["status"] == "partial":
-        done, total = _state_counts(report.get("source_states") or {})
-        st.info(f"Limited audit coverage: {done} of {total} sources completed. "
-                "Unrun checks remain **Not verified**; no missing check counts as passed.")
+        done, limited, unrun = _state_counts(report.get("source_states") or {})
+        st.info(f"Audit coverage: {done} completed, {limited} run with limits, "
+                f"{unrun} not run. Static screenshots may be available below; "
+                "unrun checks remain **Not verified**.")
     else:
         st.success("All applicable audit sources in this run completed.")
 
@@ -132,12 +137,15 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
     with tab_visual:
         images = screenshot_entries(report, root)
         if not images:
-            st.info("No screenshots are linked to this report. The browser audit has not run in this workflow.")
+            st.info("No screenshots are linked to this report. "
+                    "Enable local guarded browser capture to collect them; "
+                    "otherwise visual checks remain Not verified.")
         else:
             for viewport, path in images:
                 st.markdown(f"**{viewport.capitalize()}**")
                 st.image(str(path), caption=f"Annotated {viewport} view", use_container_width=True)
-        st.caption("Screenshots appear only when an executed browser audit links local evidence files.")
+        st.caption("Screenshots reflect a static browser session with JavaScript disabled. "
+                   "Interactive behavior is not tested and blocked resources are not page defects.")
 
     with tab_teams:
         actions = report.get("actions_by_team") or []

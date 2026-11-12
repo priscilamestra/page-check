@@ -4,7 +4,7 @@ Não executa JavaScript, não clica, não faz POST e não testa HTTP de links ex
 """
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Sequence, Mapping
 from typing import Any
 
 from pagecheck.acquisition.http.fetcher import FetchedPage, fetch_html
@@ -22,7 +22,9 @@ from pagecheck.reporting.english_copy import englishize_report
 
 def audit_page_html(url: str, *, niche: str, objective: str,
                     language: str = "en", keywords: Sequence[str] | None = None,
-                    fetch: Callable[[str], FetchedPage] = fetch_html) -> dict[str, Any]:
+                    fetch: Callable[[str], FetchedPage] = fetch_html,
+                    visual_collector: Callable[[str], Mapping[str, Any]] | None = None,
+                    ) -> dict[str, Any]:
     """Consolida resultados observados sem indicar auditoria visual como executada."""
     validated = validate_public_url(url)
     if not isinstance(niche, str) or len(niche.strip()) < 2:
@@ -51,12 +53,27 @@ def audit_page_html(url: str, *, niche: str, objective: str,
     conversion["checks"].extend(inspect_url_journey(
         validated, page.final_url, page.redirects,
     ))
+    visual_capture: Mapping[str, Any] | None = None
+    if visual_collector is not None:
+        try:
+            visual_capture = visual_collector(page.final_url)
+        except Exception as exc:
+            visual_capture = {
+                "visuals": {}, "status": "not_verified",
+                "errors": {"browser": f"Browser unavailable ({type(exc).__name__})."},
+                "mode": "guarded_static_no_javascript",
+            }
     report = consolidate_audit(
         requested_url=validated,
         final_url=page.final_url,
         niche=niche.strip(), objective=objective,
         seo=seo, conversion=conversion,
+        visuals=visual_capture.get("visuals") if visual_capture is not None else None,
     )
+    if visual_capture is not None:
+        report["visual_capture"] = {
+            key: value for key, value in visual_capture.items() if key != "visuals"
+        }
     report["audit_context"] = {"language": language, "keywords": target_keywords}
     report["seo_content_guidance"] = {
         "language": guidance["language"], "niche": guidance["niche"],

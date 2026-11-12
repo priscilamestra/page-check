@@ -99,6 +99,8 @@ def consolidate_audit(
             checks.append(normalize_check(row, source="playwright", page_url=final_url,
                                           default_module="visual", viewport=viewport))
         warnings = []
+        if isinstance(observation.get("limitations"), list):
+            warnings.extend(str(v) for v in observation["limitations"])
         if observation.get("scroll_complete") is False:
             warnings.append("Scroll não concluído: parte da página pode não ter sido inspecionada.")
         geometry = observation.get("geometry")

@@ -95,6 +95,16 @@ def check_copy(check: Mapping) -> tuple[str, str]:
         return ("UTM parameters checked", "Review campaign URL parameters for completeness.")
     if code.startswith("image-broken-"):
         return ("Broken image", "Repair the image source and verify it loads after scrolling.")
+    if code == "layout-horizontal-overflow":
+        return ("Content exceeds screen width", "Review fixed widths and responsive containers.")
+    if code.startswith("layout-control-offscreen-"):
+        return ("Interactive control outside viewport", "Keep the control visible at this screen width.")
+    if code.startswith("layout-overlap-"):
+        return ("Possible overlapping controls", "Check whether the overlap is intentional on this device.")
+    if code.startswith("image-upscaled-"):
+        return ("Image may be too small for its display size", "Check image sharpness and resolution.")
+    if code.startswith("image-aspect-"):
+        return ("Possible image aspect ratio distortion", "Review object-fit and displayed image dimensions.")
     return (str(check.get("title") or "Audit check"), str(check.get("recommendation") or ""))
 
 
@@ -134,4 +144,9 @@ def englishize_report(report: dict) -> dict:
         "This HTML audit does not execute JavaScript or validate checkout actions.",
         "No keyword ranking, search volume, or paid API research is performed.",
     ]
+    if report.get("visual_capture"):
+        report["limitations"].append(
+            "Browser capture uses guarded static rendering without JavaScript; "
+            "interactive actions and JS-dependent content remain unverified."
+        )
     return report

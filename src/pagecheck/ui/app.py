@@ -32,7 +32,7 @@ def _page_live_report(api_url: str, *, url: str, niche: str, objective: str,
             f"{api_url}/v1/audits/page",
             json={"url": url, "niche": niche, "objective": objective,
                   "language": language, "keywords": keywords or []},
-            timeout=40.0,
+            timeout=120.0,
         )
         response.raise_for_status()
         result = response.json()
@@ -68,7 +68,8 @@ def render_app() -> None:
         st.caption("Live audits require the local API server.")
         with st.expander("Developer tools"):
             st.caption("HTML audit: SEO, URL parameters, links, CTAs, and forms. "
-                       "Browser screenshots and external engines are not run here yet.")
+                       "Browser capture is optional and requires local opt-in; "
+                       "external engines are not executed by this form yet.")
             if st.button("Load sample report"):
                 try:
                     st.session_state["pagecheck_report"] = local_demo_report(ROOT)
@@ -106,8 +107,10 @@ def render_app() -> None:
         run = st.form_submit_button("Audit page", type="primary")
     st.caption(
         "Checks available in this flow: technical SEO, selected-language and keyword "
-        "alignment, URL parameters, links, CTAs, and HTML forms. Browser and screenshot "
-        "checks will be connected separately."
+        "alignment, URL parameters, links, CTAs, and HTML forms. "
+        "Desktop/mobile screenshots are added only when the local FastAPI "
+        "has PAGECHECK_ALLOW_LIVE_BROWSER=1. JavaScript remains disabled. "
+        "External engines are not part of this form yet."
     )
     if run:
         if not url.strip() or len(niche.strip()) < 2:
@@ -115,13 +118,18 @@ def render_app() -> None:
         elif not keywords:
             st.error("Add at least one target keyword to guide the content audit.")
         else:
-            with st.spinner("Checking page HTML, SEO, keywords, and URL parameters..."):
+            with st.spinner("Auditing HTML and capturing available visual evidence..."):
                 try:
                     st.session_state["pagecheck_report"] = _page_live_report(
                         api_url, url=url.strip(), niche=niche.strip(),
                         objective=objective, language=language, keywords=keywords,
                     )
-                    st.session_state["pagecheck_origin"] = "Live HTML audit · visual checks pending"
+                    visual_states = st.session_state["pagecheck_report"].get("source_states", {}).get("visuals", {})
+                    visual_done = any(value in {"completed", "partial"} for value in visual_states.values())
+                    st.session_state["pagecheck_origin"] = (
+                        "Live HTML audit · visual evidence captured (limited)" if visual_done
+                        else "Live HTML audit · visual checks not verified"
+                    )
                 except ValueError as exc:
                     st.error(str(exc))
 
