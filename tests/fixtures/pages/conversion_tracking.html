@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>CRM para SaaS</title>
+  <script src="https://www.googletagmanager.com/gtm.js?id=GTM-TESTE"></script>
+</head>
+<body>
+  <main>
+    <h1>CRM e automação de vendas</h1>
+    <p><a id="cta-schedule" href="#agendar" data-cta="true">Agendar demonstração</a></p>
+    <p><a id="broken-anchor" href="#seccao-que-nao-existe">Conhecer a equipe</a></p>
+    <p><a id="external" href="https://example.org/oferta">Saiba mais</a></p>
+    <section id="agendar">
+      <h2>Agende uma conversa</h2>
+      <form id="lead-form" method="post" action="/api/leads">
+        <label for="email">E-mail profissional</label>
+        <input id="email" name="email" type="email" required>
+        <input name="empresa" type="text" placeholder="Sua empresa">
+        <button type="submit" id="schedule-button">Agendar</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
