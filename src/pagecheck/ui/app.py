@@ -11,6 +11,9 @@ from pagecheck.ui.components.report_data import (
     OBJECTIVE_LABELS, local_demo_report, parse_uploaded_report, validate_report,
 )
 from pagecheck.ui.components.report_view import render_report
+from pagecheck.ui.history_resume import (
+    clear_active_audit, remember_active_audit, resume_active_audit,
+)
 
 ROOT = Path(__file__).resolve().parents[3]
 CONTENT_LANGUAGES = {"en": "English", "pt": "Portuguese", "es": "Spanish"}
@@ -85,6 +88,17 @@ def render_app() -> None:
     st.caption("Technical, SEO, and conversion-readiness audits · No generative AI")
 
     api_url = os.getenv("PAGECHECK_API_URL", "http://127.0.0.1:8000").rstrip("/")
+    try:
+        resume_active_audit(
+            st.session_state, st.query_params,
+            lambda audit_id: _load_history(api_url, audit_id),
+        )
+    except (httpx.HTTPError, ValueError, KeyError):
+        clear_active_audit(st.session_state, st.query_params)
+        st.warning(
+            "The last opened saved audit is no longer available. "
+            "Choose another report from history."
+        )
     with st.sidebar:
         st.markdown("### Connection")
         if _api_health(api_url):
@@ -98,6 +112,7 @@ def render_app() -> None:
                        "external engines are not executed by this form yet.")
             if st.button("Load sample report"):
                 try:
+                    clear_active_audit(st.session_state, st.query_params)
                     st.session_state["pagecheck_report"] = local_demo_report(ROOT)
                     st.session_state["pagecheck_origin"] = "Sample data · not a live audit"
                     st.session_state.pop("pagecheck_history_notice", None)
@@ -147,6 +162,7 @@ def render_app() -> None:
         else:
             with st.spinner("Auditing HTML and capturing available visual evidence..."):
                 try:
+                    clear_active_audit(st.session_state, st.query_params)
                     st.session_state["pagecheck_report"] = _page_live_report(
                         api_url, url=url.strip(), niche=niche.strip(),
                         objective=objective, language=language, keywords=keywords,
@@ -159,6 +175,7 @@ def render_app() -> None:
                     )
                     try:
                         saved_id = _save_history(api_url, st.session_state["pagecheck_report"])
+                        remember_active_audit(st.session_state, st.query_params, saved_id)
                         st.session_state["pagecheck_history_notice"] = (
                             f"Audit saved to local history ({saved_id[:8]})."
                         )
@@ -173,6 +190,7 @@ def render_app() -> None:
             try:
                 if uploaded is None:
                     raise ValueError("Choose a JSON report first.")
+                clear_active_audit(st.session_state, st.query_params)
                 st.session_state["pagecheck_report"] = parse_uploaded_report(uploaded.getvalue())
                 st.session_state["pagecheck_origin"] = "Imported report"
                 st.session_state.pop("pagecheck_history_notice", None)
@@ -198,10 +216,14 @@ def render_app() -> None:
                     f"{choices[audit_id]['status']}"
                 ),
                 key="pagecheck_selected_history",
+                index=(list(choices).index(st.query_params.get("audit"))
+                       if st.query_params.get("audit") in choices else 0),
             )
             if st.button("Open saved audit"):
                 try:
-                    st.session_state["pagecheck_report"] = _load_history(api_url, choice)
+                    report = _load_history(api_url, choice)
+                    st.session_state["pagecheck_report"] = report
+                    remember_active_audit(st.session_state, st.query_params, choice)
                     st.session_state["pagecheck_origin"] = "Saved audit · local history"
                     st.session_state.pop("pagecheck_history_notice", None)
                     st.rerun()
@@ -213,6 +235,10 @@ def render_app() -> None:
                 if st.button("Delete selected audit", disabled=not confirm):
                     try:
                         _delete_history(api_url, choice)
+                        if st.session_state.get("pagecheck_active_history_id") == choice:
+                            clear_active_audit(st.session_state, st.query_params)
+                            st.session_state.pop("pagecheck_report", None)
+                            st.session_state.pop("pagecheck_origin", None)
                         st.session_state.pop("pagecheck_history_notice", None)
                         st.rerun()
                     except httpx.HTTPError as exc:
