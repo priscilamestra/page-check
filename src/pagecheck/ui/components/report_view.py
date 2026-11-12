@@ -35,8 +35,8 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
     cols[2].metric("Alertas", counts["warning"])
     cols[3].metric("Não verificados", counts["not_verified"])
 
-    tab_summary, tab_issues, tab_visual, tab_teams, tab_data = st.tabs(
-        ["Resumo", "Problemas", "Capturas", "Equipes", "Dados"]
+    tab_summary, tab_journey, tab_issues, tab_visual, tab_teams, tab_data = st.tabs(
+        ["Resumo", "URLs e parâmetros", "Problemas", "Capturas", "Equipes", "Dados"]
     )
     with tab_summary:
         st.caption("Notas do Lighthouse são independentes da nota de conformidade SEO do Page Check.")
@@ -61,19 +61,27 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
             st.json(state, expanded=False)
             for limitation in report.get("limitations") or []:
                 st.caption(str(limitation))
+    with tab_journey:
+        st.caption("Verificações observáveis no HTML e na URL. Não representam conversões registradas no Analytics.")
+        related = [item for item in report.get("checks", [])
+                   if item.get("module") in {"tracking", "navigation", "forms"}]
+        if not related:
+            st.info("Nenhum resultado de parâmetros, navegação ou formulários recebido.")
+        else:
+            for item in related:
+                label = STATUS_LABELS.get(item.get("status"), "Não verificado")
+                st.markdown(f"**{label} · {item.get('title', 'Verificação')}**")
+                if item.get("recommendation"):
+                    st.caption(item["recommendation"])
+                with st.expander("Evidência técnica"):
+                    st.json(item.get("evidence") or {}, expanded=False)
     with tab_issues:
         findings = report.get("findings") or []
         if not findings:
             st.info("Nenhum problema foi informado nos resultados recebidos. Isso não garante ausência de problemas.")
         else:
-            levels = ["critical", "high", "medium", "low", "info"]
-            selected = st.multiselect(
-                "Gravidade", levels, default=levels,
-                format_func=lambda severity: SEVERITY_LABELS.get(severity, severity),
-            )
-            view = [item for item in findings if item.get("severity") in selected]
-            st.caption(f"{len(view)} achado(s) neste recorte")
-            for item in view:
+            st.caption(f"{len(findings)} achado(s), apresentados por prioridade automática")
+            for item in findings:
                 severity = SEVERITY_LABELS.get(item.get("severity"), "Atenção")
                 heading = f"{severity} · {item.get('title', 'Verificação')}"
                 with st.expander(heading):
@@ -112,6 +120,6 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
             "Baixar relatório JSON", export_report_json(report),
             file_name="pagecheck_auditoria.json", mime="application/json",
         )
-        st.caption("A exportação CSV/HTML e o histórico serão implementados na Etapa 17.")
+        st.caption("Exportação JSON disponível. Histórico SQLite e exportação visual ficam para a etapa seguinte.")
         with st.expander("JSON consolidado"):
             st.json(report, expanded=False)

@@ -1,9 +1,4 @@
-"""Interface Streamlit do Page Check — Etapa 16.
-
-O relatório completo só é exibido quando carregado ou fornecido pelas fontes.
-Uma consulta ao endpoint SEO devolve um relatório PARCIAL: os demais motores
-não são executados automaticamente por este formulário.
-"""
+"""Interface Page Check: auditoria HTML combinada com resultados transparentes."""
 from __future__ import annotations
 
 import os
@@ -13,7 +8,7 @@ import httpx
 import streamlit as st
 
 from pagecheck.ui.components.report_data import (
-    OBJECTIVE_LABELS, local_demo_report, parse_uploaded_report, report_from_seo_response,
+    OBJECTIVE_LABELS, local_demo_report, parse_uploaded_report, validate_report,
 )
 from pagecheck.ui.components.report_view import render_report
 
@@ -29,10 +24,10 @@ def _api_health(api_url: str) -> bool:
         return False
 
 
-def _seo_live_report(api_url: str, *, url: str, niche: str, objective: str) -> dict:
+def _page_live_report(api_url: str, *, url: str, niche: str, objective: str) -> dict:
     try:
         response = httpx.post(
-            f"{api_url}/v1/audits/seo",
+            f"{api_url}/v1/audits/page",
             json={"url": url, "niche": niche, "objective": objective},
             timeout=40.0,
         )
@@ -44,10 +39,10 @@ def _seo_live_report(api_url: str, *, url: str, niche: str, objective: str) -> d
             message = str(exc.response.json().get("detail") or message)
         except (ValueError, AttributeError):
             pass
-        raise ValueError(f"A API não concluiu a auditoria SEO: {message}") from exc
+        raise ValueError(f"A API não concluiu a auditoria: {message}") from exc
     except (httpx.RequestError, ValueError) as exc:
         raise ValueError(f"Não foi possível consultar a API: {exc}") from exc
-    return report_from_seo_response(result)
+    return validate_report(result)
 
 
 def render_app() -> None:
@@ -62,9 +57,9 @@ def render_app() -> None:
             st.success("FastAPI conectada")
         else:
             st.warning("FastAPI indisponível")
-        st.caption("O backend SEO precisa estar ativo para uma consulta real.")
+        st.caption("A API precisa estar ativa para uma auditoria real.")
         st.markdown("### Estado do projeto")
-        st.caption("Etapa 16: UI para dados consolidados e auditoria SEO real. Outros motores ainda não são executados pelo formulário.")
+        st.caption("Auditoria HTML: SEO, parâmetros de URL, links e formulários. Motores visuais ainda não são executados pelo formulário.")
 
     st.subheader("Nova auditoria")
     with st.form("audit_form"):
@@ -77,18 +72,18 @@ def render_app() -> None:
                 "Objetivo", list(OBJECTIVE_LABELS),
                 format_func=lambda value: OBJECTIVE_LABELS[value],
             )
-        run = st.form_submit_button("Auditar SEO da página", type="primary")
-    st.caption("Esta consulta executa somente o SEO determinístico. Navegação, imagens, layout e motores externos permanecem não verificados neste fluxo.")
+        run = st.form_submit_button("Auditar página", type="primary")
+    st.caption("Esta auditoria verifica SEO, parâmetros de campanha, links, CTAs e formulários pelo HTML. Destinos externos, JavaScript e screenshots ainda não são testados neste fluxo.")
     if run:
         if not url.strip() or len(niche.strip()) < 2:
             st.error("Informe a URL e o nicho antes de executar.")
         else:
-            with st.spinner("Consultando o endpoint SEO..."):
+            with st.spinner("Analisando HTML, SEO e parâmetros..."):
                 try:
-                    st.session_state["pagecheck_report"] = _seo_live_report(
+                    st.session_state["pagecheck_report"] = _page_live_report(
                         api_url, url=url.strip(), niche=niche.strip(), objective=objective,
                     )
-                    st.session_state["pagecheck_origin"] = "Auditoria SEO real (parcial)"
+                    st.session_state["pagecheck_origin"] = "Auditoria HTML real (sem execução visual)"
                 except ValueError as exc:
                     st.error(str(exc))
 
@@ -115,4 +110,4 @@ def render_app() -> None:
         st.caption(st.session_state.get("pagecheck_origin", "Relatório carregado"))
         render_report(report, root=ROOT)
     else:
-        st.info("Execute uma auditoria SEO, carregue um JSON consolidado ou abra a demonstração para visualizar o painel.")
+        st.info("Audite uma página, carregue um JSON ou abra uma demonstração para visualizar o painel.")

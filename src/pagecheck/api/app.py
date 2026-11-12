@@ -3,6 +3,7 @@
 from fastapi import FastAPI
 from pagecheck.api.routes.pages import router as pages_router
 from pagecheck.api.routes.seo import router as seo_router
+from pagecheck.api.routes.audit import router as audit_router
 
 app = FastAPI(
     title="Page Check API",
@@ -12,6 +13,7 @@ app = FastAPI(
 
 app.include_router(pages_router)
 app.include_router(seo_router)
+app.include_router(audit_router)
 
 
 @app.get("/health", tags=["system"])
