@@ -24,6 +24,7 @@ def audit_page_html(url: str, *, niche: str, objective: str,
                     language: str = "en", keywords: Sequence[str] | None = None,
                     fetch: Callable[[str], FetchedPage] = fetch_html,
                     visual_collector: Callable[[str], Mapping[str, Any]] | None = None,
+                    external_collector: Callable[[str, str], Mapping[str, Any]] | None = None,
                     ) -> dict[str, Any]:
     """Consolida resultados observados sem indicar auditoria visual como executada."""
     validated = validate_public_url(url)
@@ -63,13 +64,35 @@ def audit_page_html(url: str, *, niche: str, objective: str,
                 "errors": {"browser": f"Browser unavailable ({type(exc).__name__})."},
                 "mode": "guarded_static_no_javascript",
             }
+    external_result: Mapping[str, Any] | None = None
+    if external_collector is not None:
+        try:
+            candidate = external_collector(page.html, page.final_url)
+            if not isinstance(candidate, Mapping):
+                raise TypeError("External collector must return a mapping.")
+            external_result = candidate
+        except Exception as exc:
+            from pagecheck.application.use_cases.external_engines import combine_engines
+            external_result = combine_engines({})
+            external_result["execution_error"] = type(exc).__name__
     report = consolidate_audit(
         requested_url=validated,
         final_url=page.final_url,
         niche=niche.strip(), objective=objective,
         seo=seo, conversion=conversion,
         visuals=visual_capture.get("visuals") if visual_capture is not None else None,
+        external=external_result,
     )
+    if external_result is not None:
+        report["external_capture"] = {
+            "mode": "opt_in_sanitized_static_html",
+            "status": external_result.get("status", "not_verified"),
+            "limitations": [
+                "External checks analyze a sanitized snapshot from the same safe HTML fetch. "
+                "They do not validate runtime behaviour, real Lighthouse performance, "
+                "or the original page's full visual design."
+            ],
+        }
     if visual_capture is not None:
         report["visual_capture"] = {
             key: value for key, value in visual_capture.items() if key != "visuals"

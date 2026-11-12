@@ -109,7 +109,8 @@ def render_app() -> None:
         with st.expander("Developer tools"):
             st.caption("HTML audit: SEO, URL parameters, links, CTAs, and forms. "
                        "Browser capture is optional and requires local opt-in; "
-                       "external engines are not executed by this form yet.")
+                       "static external engines require PAGECHECK_ALLOW_LOCAL_STATIC_ENGINES=1; "
+                       "Lighthouse is limited to trusted local fixtures.")
             if st.button("Load sample report"):
                 try:
                     clear_active_audit(st.session_state, st.query_params)
@@ -152,7 +153,8 @@ def render_app() -> None:
         "alignment, URL parameters, links, CTAs, and HTML forms. "
         "Desktop/mobile screenshots are added only when the local FastAPI "
         "has PAGECHECK_ALLOW_LIVE_BROWSER=1. JavaScript remains disabled. "
-        "External engines are not part of this form yet."
+        "Static external engine checks require an explicit local opt-in; "
+        "Lighthouse is not run against arbitrary public URLs."
     )
     if run:
         if not url.strip() or len(niche.strip()) < 2:
