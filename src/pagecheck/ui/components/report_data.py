@@ -15,17 +15,17 @@ REPORT_SCHEMA = "audit-report-1.0"
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 MAX_SCREENSHOT_BYTES = 20 * 1024 * 1024
 STATUS_LABELS = {
-    "passed": "Aprovado", "failed": "Problema", "warning": "Atenção",
-    "not_verified": "Não verificado", "not_applicable": "Não aplicável",
+    "passed": "Passed", "failed": "Issue", "warning": "Needs review",
+    "not_verified": "Not verified", "not_applicable": "Not applicable",
 }
 SEVERITY_LABELS = {
-    "critical": "Crítica", "high": "Alta", "medium": "Média",
-    "low": "Baixa", "info": "Informativa",
+    "critical": "Critical", "high": "High", "medium": "Medium",
+    "low": "Low", "info": "Info",
 }
 OBJECTIVE_LABELS = {
-    "leads": "Gerar leads", "meetings": "Agendar reuniões",
-    "sales": "Vender", "signup": "Captar inscrições",
-    "organic_traffic": "Tráfego orgânico",
+    "leads": "Generate leads", "meetings": "Book meetings",
+    "sales": "Drive sales", "signup": "Get sign-ups",
+    "organic_traffic": "Organic traffic",
 }
 
 

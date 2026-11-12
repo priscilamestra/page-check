@@ -13,12 +13,16 @@ router = APIRouter(prefix="/v1/audits", tags=["audit"])
 @router.post("/page")
 def audit_page(payload: PageAuditRequest) -> dict:
     if os.getenv("PAGECHECK_ALLOW_LIVE_FETCH") != "1":
-        raise HTTPException(503, "Consulta remota desabilitada; habilite apenas em desenvolvimento local.")
+        raise HTTPException(503, "Live URL fetching is disabled. Enable it only for local development.")
     try:
         url = validate_public_url(payload.url)
-        return audit_page_html(url, niche=payload.niche, objective=payload.objective)
+        kwargs = {"niche": payload.niche, "objective": payload.objective}
+        # Preserve the original call shape for legacy consumers and patched tests.
+        if payload.language != "en" or payload.keywords:
+            kwargs.update(language=payload.language, keywords=payload.keywords)
+        return audit_page_html(url, **kwargs)
     except (UnsafeDestination, URLValidationError) as exc:
-        raise HTTPException(403, "Destino de rede não permitido.") from exc
+        raise HTTPException(403, "This network destination is not permitted.") from exc
     except FetchError as exc:
         raise HTTPException(502, str(exc)) from exc
     except ValueError as exc:
