@@ -1,0 +1,22 @@
+{
+  "name": "pagecheck",
+  "version": "1.0.0",
+  "description": "**Status:** estrutura inicial e conexão API/UI prontas. **Os motores de auditoria ainda NÃO foram implementados.**",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "axe-core": "^4.14.0",
+    "impeccable": "^4.8.2",
+    "lighthouse": "^13.6.0"
+  }
+}

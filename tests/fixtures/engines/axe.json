@@ -1,0 +1,1 @@
+{"violations":[{"id":"image-alt","impact":"serious","help":"Images must have alternative text","description":"Assistive technology needs text","helpUrl":"https://dequeuniversity.com/rules/axe/image-alt","nodes":[{"target":["img#bad"]}]}],"passes":[{"id":"html-has-lang"}],"incomplete":[]}
