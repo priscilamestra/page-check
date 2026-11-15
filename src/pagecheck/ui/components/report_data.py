@@ -114,7 +114,7 @@ def screenshot_entries(report: Mapping[str, Any], root: Path) -> list[tuple[str,
         values = raw.get(viewport)
         if not isinstance(values, Mapping):
             continue
-        path = safe_screenshot_path(values.get("annotated") or values.get("after_scroll"), root)
+        path = safe_screenshot_path(values.get("annotated") or values.get("after_scroll") or values.get("initial"), root)
         if path:
             images.append((viewport, path))
     return images

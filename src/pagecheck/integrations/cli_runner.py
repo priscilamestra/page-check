@@ -29,20 +29,25 @@ def run_local_json_command(engine: str, command: list[str], *, root: Path,
         raise ValueError("Timeout fora do limite.")
     try:
         completed = run(command, cwd=str(root.resolve()), capture_output=True,
-                        text=True, timeout=timeout, check=False)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return unavailable(engine, f"Execução indisponível: {type(exc).__name__}")
+                        text=True, encoding="utf-8", errors="replace",
+                        timeout=timeout, check=False)
+    except subprocess.TimeoutExpired:
+        return unavailable(engine, f"The local detector timed out after {timeout} seconds. "
+                           "The result was not verified.")
+    except OSError as exc:
+        return unavailable(engine, f"Local detector could not start ({type(exc).__name__}).")
     valid_codes = {0, 2} if engine == "impeccable" else {0}
     if completed.returncode not in valid_codes:
-        return unavailable(engine, f"Falha na ferramenta (exit {completed.returncode}).")
+        return unavailable(engine, f"Local detector exited with code {completed.returncode}. "
+                           "Check the installed CLI and its local fixture test.")
     try:
         payload = json.loads(completed.stdout)
     except (ValueError, TypeError) as exc:
-        return unavailable(engine, f"Saída não era JSON válido ({type(exc).__name__}).")
+        return unavailable(engine, f"Detector did not return valid JSON ({type(exc).__name__}).")
     from pagecheck.integrations.impeccable.adapter import normalize_impeccable
     from pagecheck.integrations.lighthouse.adapter import normalize_lighthouse
     try:
         return (normalize_impeccable(payload) if engine == "impeccable"
                 else normalize_lighthouse(payload))
     except EngineOutputError as exc:
-        return unavailable(engine, f"Formato inesperado: {exc}")
+        return unavailable(engine, f"Detector output format was not recognized ({type(exc).__name__}).")

@@ -1,82 +1,88 @@
 # Page Check
 
-**Status:** estrutura inicial e conexão API/UI prontas. **Os motores de auditoria ainda NÃO foram implementados.**
+**Local development project — integrated HTML/SEO, conversion, visual evidence, static external diagnostics, SQLite history and report exports. Not production-ready for public URL scanning.**
 
-Page Check é um projeto local-first de auditoria técnica e visual de landing pages para marketing e GTM, com relatórios verificáveis e sem IA generativa ou APIs pagas obrigatórias.
+Page Check performs deterministic landing-page checks for technical marketing/GTM teams, without generative AI or paid APIs. It reports what was actually verified. It does not measure Google rankings, real analytics conversions, JavaScript-only interactions, real checkout completion, or full WCAG compliance.
 
-## Convenção de nomes
+## Requirements
 
-- **Page Check**: nome exibido do produto.
-- **`pagecheck/`**: nome da pasta raiz e do repositório sugerido.
-- **`src/pagecheck/`**: nome do pacote Python (sem espaços).
-- **`main.py`**: entrada da FastAPI.
-- **`streamlit_app.py`**: entrada da interface Streamlit.
+- Windows PowerShell or equivalent terminal, Python 3.11+ and `uv`.
+- Playwright Chromium installed for optional browser visual inspection.
+- For opt-in local static external engines, local `axe-core` and Impeccable Node dependencies installed per `docs/STATIC_ENGINES_STAGE18.md`. Lighthouse runs only on a **trusted local fixture**, not arbitrary public URLs.
 
-## Pré-requisitos
+Install the project's Python dependencies (`uv sync`) and, where applicable, its browser/Node dependencies as described in the linked stage docs. The project must not auto-install CLI packages in the course of an audit.
 
-- Python 3.11+ e `uv` instalado.
-- Node.js e Playwright/Chrome serão necessários em etapas futuras para alguns motores de auditoria; **não** são pré-requisitos do bootstrap.
+## Start locally (two VS Code PowerShell terminals)
 
-## Instalação (PowerShell / terminal do VS Code)
-
-Abra **dois terminais na pasta raiz `pagecheck`**. Instale as dependências uma vez:
+**Terminal 1 — FastAPI (loopback only):**
 
 ```powershell
-uv sync
-```
-
-**Terminal 1 — API:**
-
-```powershell
+$env:PAGECHECK_ALLOW_LIVE_FETCH="1"
+$env:PAGECHECK_ALLOW_LIVE_BROWSER="1"
+$env:PAGECHECK_ALLOW_LOCAL_STATIC_ENGINES="1"
 uv run uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-- Saúde: http://127.0.0.1:8000/health
-- Documentação da API: http://127.0.0.1:8000/docs
+API health: http://127.0.0.1:8000/health
 
 **Terminal 2 — Streamlit:**
 
 ```powershell
-uv run streamlit run streamlit_app.py --server.port 8501
+uv run streamlit run streamlit_app.py --server.address 127.0.0.1 --server.port 8501
 ```
 
-- Interface: http://localhost:8501
-- A interface mostra se a API respondeu. **Ainda não audita URLs.**
+UI: http://localhost:8501
 
-Para testes rápidos:
+These opt-in environment variables are **strictly for local development**. Keep the servers bound to `127.0.0.1`. Do not expose this configuration through a public server, reverse proxy, or cloud deployment. Stop with `Ctrl+C` in both terminals.
+
+Run tests:
 
 ```powershell
-uv run pytest tests/unit/test_health.py
+uv run pytest -q
 ```
 
-## Onde trabalhar em cada etapa
+## What an audit contains
 
-| Objetivo | Pasta responsável |
+Enter a public URL, niche, content language, page goal and target keyword tags, then press **Audit page**. The report can include:
+
+- Technical HTML SEO (title, description, headings, canonical, alt text) plus separate content/keyword guidance. A score of 100/100 refers **only to eligible scored technical checks**.
+- URL/UTM journey, structural links/CTAs, form and analytics-tag presence (without visiting unsafe destinations, sending forms, or claiming events reached analytics tools).
+- Optional static desktop/mobile evidence from a guarded browser **without JavaScript**. Oversized pages may provide only first-viewport partial evidence without annotations.
+- Optional static HTML accessibility checks (axe-core) and design heuristics (Impeccable). Neither is a complete live-site audit.
+- Local SQLite history with re-opening after F5, JSON/CSV/HTML+PNG ZIP export, and a readable per-engine status panel.
+
+`Not verified` means insufficient evidence or a check not performed; it is not a defect. `Needs review` means a human should confirm an observation. Lighthouse on a public URL remains `Not verified`. Check **Overview → Audit sources** and **Screenshots** for recorded reasons when a source did not finish.
+
+## Project structure
+
+| Area | Location |
 |---|---|
-| Endpoints HTTP e validação de payload | `src/pagecheck/api/` |
-| Interface visual e componentes | `src/pagecheck/ui/` |
-| Fluxo da auditoria | `src/pagecheck/application/` |
-| Modelos e pontuação pura | `src/pagecheck/domain/` |
-| HTTP, HTML, Playwright, rede | `src/pagecheck/acquisition/` |
-| Regras por área (SEO, layout etc.) | `src/pagecheck/audits/` |
-| Integrações CLI externas | `src/pagecheck/integrations/` |
-| Relatórios, marcações, exportação | `src/pagecheck/reporting/` |
-| Histórico e artefatos | `src/pagecheck/persistence/` |
-| Segurança, erros e configurações | `src/pagecheck/common/` |
-| Testes independentes | `tests/` |
+| API and request validation | `src/pagecheck/api/` |
+| Audit orchestration | `src/pagecheck/application/use_cases/` |
+| Guarded HTTP / browser acquisition | `src/pagecheck/acquisition/` |
+| Rule modules | `src/pagecheck/audits/` |
+| External engine adapters | `src/pagecheck/integrations/` |
+| Streamlit UI | `src/pagecheck/ui/` |
+| Consolidation and exports | `src/pagecheck/reporting/` |
+| SQLite local audit history | `src/pagecheck/persistence/sqlite/` |
+| Tests | `tests/` |
+| Stage documentation | `docs/` |
 
-Pastas reservadas para módulos futuros contêm `.gitkeep`: isso permite versioná-las enquanto estiverem vazias. Não importe regras de auditoria diretamente da interface Streamlit.
+## Security and limitations
 
-## Documentação
+- Restricted public-host validation and IP-pinned requests are used in the HTTP layer, but **this is not a hardened public web-scanning service**.
+- The browser is limited to local development and guarded static rendering: no page JavaScript, downloads, service workers, form POSTs or Chrome navigations outside the guarded route policy. Full safe public deployment would require OS-level isolation and further security review.
+- Node detectors analyze sanitized HTML only. Lighthouse launches its own network-capable Chrome and is deliberately excluded from arbitrary public targets.
+- Output may contain URLs, HTML evidence or screenshot metadata. Local history and exported reports should be handled as private project data. `data/local/` and `artifacts/` are excluded from Git.
+- No paid APIs, private-data collection, real lead submissions, behavioral heatmaps, or automatic production deployment.
 
-- [PRD](docs/PRD.md)
-- [Arquitetura e estrutura](docs/ARCHITECTURE.md)
-- [Plano de implementação](docs/IMPLEMENTATION_PLAN.md)
-- [Pontuação e regras](docs/SCORING_AND_RULES.md)
-- [Contrato da API](docs/API_CONTRACT.md)
+## Further documentation
 
-## Limites importantes
+- [Stage 18 coverage and failure diagnostics](docs/STAGE18_COVERAGE_DIAGNOSTICS.md)
+- [Stage 18 safe static engines](docs/STATIC_ENGINES_STAGE18.md)
+- [Stage 18 E2E offline test](docs/FINAL_E2E_GATE_STAGE18.md)
+- [Stage 17 local history and exports](docs/HISTORY_STAGE17.md)
+- [Visual static-browser integration](docs/UI_STAGE16D.md)
+- [Architecture](docs/ARCHITECTURE.md) · [API contract](docs/API_CONTRACT.md) · [PRD](docs/PRD.md)
 
-Não são realizados: rastreamento de usuários, heatmap comportamental, envio real de formulários, pentest, verificação de endpoints privados ou análise semântica de imagens de IA. A auditoria futura será baseada em verificações públicas e seguras.
-
-O projeto **Stock** permanece separado e inalterado.
+**Known remaining work:** validate the observed failure reasons on a freshly captured commercial-page report, finish the separate UX redesign for Overview/graphs/screenshots, and complete production isolation before any public deployment.

@@ -16,9 +16,14 @@ def normalize_impeccable(payload: object) -> dict:
     for index, row in enumerate(records):
         if not isinstance(row, dict):
             raise EngineOutputError("Impeccable retornou achado inválido.")
-        rule = row.get("ruleId") or row.get("rule") or row.get("id")
+        # Detector versions have used both camelCase and snake_case keys.
+        # Only accept explicit rule identifiers. Never manufacture a rule ID
+        # from the message, severity, file path or array position.
+        rule = (row.get("ruleId") or row.get("rule_id") or row.get("rule")
+                or row.get("id") or row.get("checkId") or row.get("check_id"))
         if isinstance(rule, dict):
-            rule = rule.get("id")
+            rule = (rule.get("id") or rule.get("ruleId") or rule.get("rule_id")
+                    or rule.get("key"))
         if not isinstance(rule, str) or not rule.strip():
             raise EngineOutputError("Impeccable retornou achado sem identificador de regra.")
         level = str(row.get("severity") or row.get("level") or "warning").lower()

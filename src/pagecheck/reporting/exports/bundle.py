@@ -74,7 +74,7 @@ def _visual_files(report: Mapping[str, Any], root: Path) -> dict[str, Path]:
         records = shots.get(viewport)
         if not isinstance(records, Mapping):
             continue
-        target = _screenshot(records.get("annotated") or records.get("after_scroll"), root)
+        target = _screenshot(records.get("annotated") or records.get("after_scroll") or records.get("initial"), root)
         if target is not None:
             result[viewport] = target
     return result
@@ -98,7 +98,7 @@ def html_export(report: Mapping[str, Any], images: Mapping[str, Path] | None = N
         return escape(str(counts.get(key, 0))) if isinstance(counts, Mapping) else "0"
     cards = "".join(
         f'<div class="metric"><span>{label}</span><strong>{value}</strong></div>'
-        for label, value in (("SEO score", score_text), ("Issues", number("failed")),
+        for label, value in (("Technical SEO (scored rules)", score_text), ("Issues", number("failed")),
                              ("Needs review", number("warning")),
                              ("Not verified", number("not_verified")))
     )

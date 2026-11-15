@@ -59,8 +59,31 @@ def capture_with_browser(
             document_height = int(page.evaluate(
                 "() => Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)"
             ))
-            if document_height < 1 or document_height > MAX_DOCUMENT_HEIGHT:
-                errors[viewport] = "The document exceeds the safe visual capture height."
+            if document_height < 1:
+                errors[viewport] = "Document height could not be measured."
+                continue
+            if document_height > MAX_DOCUMENT_HEIGHT:
+                # Full-page screenshots on very long commercial pages may
+                # exhaust resources. Preserve only the visible viewport: this
+                # is evidence of rendering, NOT a full visual/layout audit.
+                folder = output_dir / viewport
+                folder.mkdir(parents=True, exist_ok=True)
+                screenshot = folder / "initial_viewport.png"
+                page.screenshot(path=str(screenshot), full_page=False,
+                                animations="disabled", timeout=10000)
+                results[viewport] = {
+                    "viewport": viewport,
+                    "screenshots": {"initial": str(screenshot)},
+                    "findings": [],
+                    "scroll_complete": False,
+                    "geometry": {"document_height": document_height, "truncated": True},
+                    "images": {"total": 0, "broken": 0, "not_verified": 0},
+                    "limitations": [
+                        f"Page height exceeds the safe {MAX_DOCUMENT_HEIGHT}px full-page limit. "
+                        "Only the first viewport was captured, without annotations "
+                        "or layout/image diagnostics."
+                    ],
+                }
                 continue
             observation = audit_visual_viewport(
                 page, output_dir=output_dir / viewport,
@@ -89,7 +112,9 @@ def capture_with_browser(
                 context.close()
     return {
         "visuals": results,
-        "status": "partial" if errors or len(results) != len(VIEWPORTS) else "captured",
+        "status": "partial" if (errors or len(results) != len(VIEWPORTS)
+                              or any(not item.get("scroll_complete", True)
+                                     for item in results.values())) else "captured",
         "errors": errors,
         "mode": "guarded_static_no_javascript",
     }

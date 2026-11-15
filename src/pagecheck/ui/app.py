@@ -11,6 +11,7 @@ from pagecheck.ui.components.report_data import (
     OBJECTIVE_LABELS, local_demo_report, parse_uploaded_report, validate_report,
 )
 from pagecheck.ui.components.report_view import render_report
+from pagecheck.ui.history_labels import history_option_label
 from pagecheck.ui.history_resume import (
     clear_active_audit, remember_active_audit, resume_active_audit,
 )
@@ -83,9 +84,8 @@ def _delete_history(api_url: str, audit_id: str) -> None:
 
 
 def render_app() -> None:
-    st.set_page_config(page_title="Page Check", page_icon="🔎", layout="wide")
-    st.title("Page Check")
-    st.caption("Technical, SEO, and conversion-readiness audits · No generative AI")
+    st.set_page_config(page_title="Page Check", page_icon="🔎", layout="wide",
+                       initial_sidebar_state="collapsed")
 
     api_url = os.getenv("PAGECHECK_API_URL", "http://127.0.0.1:8000").rstrip("/")
     try:
@@ -99,26 +99,38 @@ def render_app() -> None:
             "The last opened saved audit is no longer available. "
             "Choose another report from history."
         )
-    with st.sidebar:
-        st.markdown("### Connection")
-        if _api_health(api_url):
-            st.success("FastAPI connected")
-        else:
-            st.warning("FastAPI unavailable")
-        st.caption("Live audits require the local API server.")
-        with st.expander("Developer tools"):
-            st.caption("HTML audit: SEO, URL parameters, links, CTAs, and forms. "
-                       "Browser capture is optional and requires local opt-in; "
-                       "static external engines require PAGECHECK_ALLOW_LOCAL_STATIC_ENGINES=1; "
-                       "Lighthouse is limited to trusted local fixtures.")
-            if st.button("Load sample report"):
-                try:
-                    clear_active_audit(st.session_state, st.query_params)
-                    st.session_state["pagecheck_report"] = local_demo_report(ROOT)
-                    st.session_state["pagecheck_origin"] = "Sample data · not a live audit"
-                    st.session_state.pop("pagecheck_history_notice", None)
-                except (FileNotFoundError, ValueError) as exc:
-                    st.error(str(exc))
+    # Native top-of-page popover: no sidebar and no fragile toolbar CSS hacks.
+    # The native Streamlit "Deploy" button belongs to Streamlit's browser chrome;
+    # the connection/tools menu sits at the right edge of app content below it.
+    is_production = os.getenv("PAGECHECK_ENV", "local").strip().lower() == "production"
+    heading, tools = st.columns([7, 2], vertical_alignment="top")
+    with heading:
+        st.title("Page Check")
+        st.caption("Technical, SEO, and conversion-readiness audits · No generative AI")
+    with tools:
+        with st.popover("Connection" if is_production else "Connection & tools",
+                        icon=":material/settings:", use_container_width=True):
+            st.markdown("**Connection**")
+            if _api_health(api_url):
+                st.success("FastAPI connected")
+            else:
+                st.info("FastAPI offline")
+            st.caption("Live audits require the local API server.")
+            if not is_production:
+                with st.expander("Developer tools"):
+                    st.caption("HTML audit: SEO, URL parameters, links, CTAs, and forms. "
+                               "Browser capture is optional and requires local opt-in; "
+                               "static external engines require PAGECHECK_ALLOW_LOCAL_STATIC_ENGINES=1; "
+                               "Lighthouse is limited to trusted local fixtures.")
+                    if st.button("Load sample report"):
+                        try:
+                            clear_active_audit(st.session_state, st.query_params)
+                            st.session_state["pagecheck_report"] = local_demo_report(ROOT)
+                            st.session_state["pagecheck_origin"] = "Sample data · not a live audit"
+                            st.session_state.pop("pagecheck_history_notice", None)
+                            st.rerun()
+                        except (FileNotFoundError, ValueError) as exc:
+                            st.error(str(exc))
 
     st.subheader("New audit")
     with st.form("audit_form"):
@@ -210,12 +222,15 @@ def render_app() -> None:
             st.caption("No saved audits yet.")
         else:
             choices = {item["id"]: item for item in history}
+            # The browser timezone is the user's location, not the server's.
+            # ISO/UTC is retained inside SQLite for accurate sorting and storage.
+            client_timezone = getattr(st.context, "timezone", None)
+            client_offset = getattr(st.context, "timezone_offset", None)
             choice = st.selectbox(
                 "Choose a saved audit", options=list(choices),
-                format_func=lambda audit_id: (
-                    f"{choices[audit_id]['created_at']} · "
-                    f"{choices[audit_id]['requested_url']} · "
-                    f"{choices[audit_id]['status']}"
+                format_func=lambda audit_id: history_option_label(
+                    choices[audit_id], browser_timezone=client_timezone,
+                    browser_offset_minutes=client_offset,
                 ),
                 key="pagecheck_selected_history",
                 index=(list(choices).index(st.query_params.get("audit"))
