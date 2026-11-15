@@ -109,18 +109,20 @@ def _source_cards(report: dict[str, Any]) -> None:
     st.caption("One bar represents all audited sources. Segments show the share of "
                "sources that completed, ran with limits, or could not be verified.")
     st.markdown(source_composition_html(counts), unsafe_allow_html=True)
-    cols = st.columns(2)
-    for index, row in enumerate(source_rows(report)):
-        with cols[index % 2]:
-            with st.container(border=True):
-                st.markdown(f"**{row['title']}**")
-                st.badge(row["status_label"], color=(
-                    "green" if row["status"] == "completed" else
-                    "orange" if row["status"] == "partial" else "gray"))
-                st.caption(row["description"])
-                if row["reason"]:
-                    with st.expander("Scope / reason"):
-                        st.caption(row["reason"])
+    # Keep the source cards available for inspection without stretching the
+    # executive Overview by seven rows of technical explanations.
+    with st.expander("View the seven audit sources and limitations"):
+        cols = st.columns(2)
+        for index, row in enumerate(source_rows(report)):
+            with cols[index % 2]:
+                with st.container(border=True):
+                    st.markdown(f"**{row['title']}**")
+                    st.badge(row["status_label"], color=(
+                        "green" if row["status"] == "completed" else
+                        "orange" if row["status"] == "partial" else "gray"))
+                    st.caption(row["description"])
+                    if row["reason"]:
+                        st.caption("Scope / reason: " + row["reason"])
 
 
 def render_overview(report: dict[str, Any], *, root: Path) -> None:
@@ -162,21 +164,20 @@ def render_overview(report: dict[str, Any], *, root: Path) -> None:
     _source_cards(report)
 
     st.markdown("#### Checks without enough evidence")
-    st.caption("Not verified does not mean a broken element. These items are separate "
-               "from findings and may be repeated for similar navigation elements.")
     missing = missing_evidence_rows(report)
     if missing:
         total_missing = sum(item["total"] for item in missing)
-        st.dataframe([
-            {"Area": str(item["area"]).replace("_", " ").title(),
-             "Not verified": item["total"],
-             "Share of unverified checks": f"{item['total']/total_missing:.1%}"}
-            for item in missing
-        ], hide_index=True, use_container_width=True,
-           height=min(240, 55 + len(missing) * 36))
         st.caption(f"{count_label(total_missing, 'unverified check')} across "
-                   f"{count_label(len(missing), 'area')}. A large navigation count "
-                   "does not imply the same number of independent defects.")
+                   f"{count_label(len(missing), 'area')}. These are not confirmed "
+                   "defects; repeated page elements may generate multiple checks.")
+        with st.expander("Explore unverified checks by area"):
+            st.dataframe([
+                {"Area": str(item["area"]).replace("_", " ").title(),
+                 "Not verified": item["total"],
+                 "Share of unverified checks": f"{item['total']/total_missing:.1%}"}
+                for item in missing
+            ], hide_index=True, use_container_width=True,
+               height=min(240, 55 + len(missing) * 36))
     else:
         st.caption("No individually unverified checks were recorded by area.")
 

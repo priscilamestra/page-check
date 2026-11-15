@@ -6,6 +6,7 @@ from typing import Any
 import streamlit as st
 
 from pagecheck.reporting.english_copy import check_copy, team_name
+from pagecheck.ui.components.table_sizing import compact_table_height
 from pagecheck.ui.components.teams_explorer import filter_team_tasks, team_summary, team_tasks
 
 
@@ -38,7 +39,7 @@ def render_teams(report: dict[str, Any]) -> None:
                    "Task": r["title"][:110], "Next step": r["recommendation"][:140]}
                   for r in selected_rows],
                  hide_index=True, use_container_width=True,
-                 height=min(380, 60 + len(selected_rows) * 37))
+                 height=compact_table_height(len(selected_rows), max_height=380))
     lookup = {r["index"]: r for r in selected_rows}
     chosen = st.selectbox("Inspect action", [None] + list(lookup),
                           format_func=lambda i: "Choose an action" if i is None

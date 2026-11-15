@@ -70,6 +70,9 @@ Enter a public URL, niche, content language, page goal and target keyword tags, 
 
 ## Security and limitations
 
+**Do not deploy this scanner publicly yet.** `PAGECHECK_ENV=production` intentionally disables live URL scanning and unauthenticated local history routes, even when the local opt-in variables are enabled. That fail-closed behavior protects an incomplete deployment but does not make a functioning public URL-scanning service. See [Stage 20 security gate](docs/STAGE20_POLISH_AND_DEPLOY_GATE.md).
+
+
 - Restricted public-host validation and IP-pinned requests are used in the HTTP layer, but **this is not a hardened public web-scanning service**.
 - The browser is limited to local development and guarded static rendering: no page JavaScript, downloads, service workers, form POSTs or Chrome navigations outside the guarded route policy. Full safe public deployment would require OS-level isolation and further security review.
 - Node detectors analyze sanitized HTML only. Lighthouse launches its own network-capable Chrome and is deliberately excluded from arbitrary public targets.
@@ -85,4 +88,4 @@ Enter a public URL, niche, content language, page goal and target keyword tags, 
 - [Visual static-browser integration](docs/UI_STAGE16D.md)
 - [Architecture](docs/ARCHITECTURE.md) · [API contract](docs/API_CONTRACT.md) · [PRD](docs/PRD.md)
 
-**Known remaining work:** validate the observed failure reasons on a freshly captured commercial-page report, finish the separate UX redesign for Overview/graphs/screenshots, and complete production isolation before any public deployment.
+**Known remaining work:** verify Impeccable with the actual locally installed CLI and design a sandboxed, rate-limited, privacy-reviewed public scanning architecture before any public deployment. The Stage 19 compact UX and Stage 20 polish are implemented for local testing; see [Stage 20 security gate](docs/STAGE20_POLISH_AND_DEPLOY_GATE.md).

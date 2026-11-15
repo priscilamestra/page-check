@@ -6,6 +6,7 @@ from typing import Any
 import streamlit as st
 
 from pagecheck.reporting.english_copy import check_copy, team_name
+from pagecheck.ui.components.table_sizing import compact_table_height
 from pagecheck.ui.components.issues_explorer import (
     filter_findings, finding_rows, finding_summary, findings_table,
 )
@@ -51,7 +52,7 @@ def render_issues(report: dict[str, Any]) -> None:
         st.info("No findings match these filters. Change the filters or clear the search.")
         return
     st.dataframe(findings_table(visible), hide_index=True,
-                 use_container_width=True, height=min(400, 65 + len(visible) * 37))
+                 use_container_width=True, height=compact_table_height(len(visible), max_height=400))
     options = {item["index"]: item for item in visible}
     selected = st.selectbox(
         "Inspect a finding", [None] + list(options),

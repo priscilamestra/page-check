@@ -14,6 +14,7 @@ from pagecheck.ui.components.overview_view import render_overview
 from pagecheck.ui.components.issues_view import render_issues
 from pagecheck.ui.components.screenshots_view import render_screenshots
 from pagecheck.ui.components.teams_view import render_teams
+from pagecheck.ui.components.table_sizing import compact_table_height
 from pagecheck.ui.components.url_explorer import (
     campaign_parameters, check_rows, area_summary, filter_rows,
 )
@@ -114,7 +115,8 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
                 table = [{"Area": r["area"].title(), "Check": r["title"][:100],
                           "Result": r["label"], "Suggested action": r["recommendation"][:140]}
                          for r in filtered]
-                st.dataframe(table, hide_index=True, use_container_width=True, height=350)
+                st.dataframe(table, hide_index=True, use_container_width=True,
+                             height=compact_table_height(len(table), max_height=350))
                 options = {f"{r['index'] + 1} · {r['area'].title()} · {r['title'][:85]}": r
                            for r in filtered}
                 selected = st.selectbox("Inspect a check", ["Select a check..."] + list(options),

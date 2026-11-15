@@ -25,7 +25,17 @@ def normalize_impeccable(payload: object) -> dict:
             rule = (rule.get("id") or rule.get("ruleId") or rule.get("rule_id")
                     or rule.get("key"))
         if not isinstance(rule, str) or not rule.strip():
-            raise EngineOutputError("Impeccable retornou achado sem identificador de regra.")
+            # Include only a bounded list of field *names*, never raw values,
+            # so a future real-world mismatch can be diagnosed without leaking HTML.
+            fields = sorted(
+                name for name in row if isinstance(name, str)
+                and len(name) <= 32 and name.replace("_", "").isalnum()
+            )[:12]
+            shape = ", ".join(fields) if fields else "none"
+            raise EngineOutputError(
+                f"Impeccable finding #{index + 1} has no stable rule ID "
+                f"(available fields: {shape})."
+            )
         level = str(row.get("severity") or row.get("level") or "warning").lower()
         severity = {"error": "high", "critical": "critical", "warning": "medium",
                     "info": "low", "advisory": "low"}.get(level, "medium")

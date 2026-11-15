@@ -1,8 +1,8 @@
 """Endpoint interno de inspeção; não é ainda a auditoria completa."""
 
-import os
-
 from fastapi import APIRouter, HTTPException
+
+from pagecheck.common.security.deployment import live_fetch_enabled
 
 from pagecheck.acquisition.http.fetcher import FetchError
 from pagecheck.acquisition.http.safe_transport import UnsafeDestination
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/v1/pages", tags=["pages"])
 def inspect_public_page(payload: PageInspectionRequest) -> dict:
     """Inspeção síncrona local de HTML sem avaliação de SEO/UX."""
     # O projeto ainda não tem autenticação, quotas e revisão de segurança para deploy público.
-    if os.getenv("PAGECHECK_ALLOW_LIVE_FETCH") != "1":
+    if not live_fetch_enabled():
         raise HTTPException(
             status_code=503,
             detail="Consulta remota desabilitada; habilite apenas no desenvolvimento local.",

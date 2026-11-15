@@ -102,7 +102,9 @@ def render_app() -> None:
     # Native top-of-page popover: no sidebar and no fragile toolbar CSS hacks.
     # The native Streamlit "Deploy" button belongs to Streamlit's browser chrome;
     # the connection/tools menu sits at the right edge of app content below it.
-    is_production = os.getenv("PAGECHECK_ENV", "local").strip().lower() == "production"
+    is_production = os.getenv("PAGECHECK_ENV", "local").strip().lower() not in {
+        "local", "dev", "development", "test"
+    }
     heading, tools = st.columns([9, 1.6], vertical_alignment="top")
     with heading:
         st.title("Page Check")
@@ -133,6 +135,9 @@ def render_app() -> None:
                             st.error(str(exc))
 
     st.subheader("New audit")
+    if is_production:
+        st.warning("Public URL scans are disabled until the scanner has an isolated "
+                   "network/runtime and access controls. Local development remains available.")
     with st.form("audit_form"):
         url = st.text_input("Public page URL", placeholder="https://your-domain.com/page")
         left, middle, right = st.columns([2, 1, 2])
@@ -159,7 +164,7 @@ def render_app() -> None:
             help="Add up to eight words or phrases. These guide content checks; "
                  "they do not replace technical SEO checks or query Google rankings.",
         )
-        run = st.form_submit_button("Audit page", type="primary")
+        run = st.form_submit_button("Audit page", type="primary", disabled=is_production)
     st.caption(
         "Checks available in this flow: technical SEO, selected-language and keyword "
         "alignment, URL parameters, links, CTAs, and HTML forms. "

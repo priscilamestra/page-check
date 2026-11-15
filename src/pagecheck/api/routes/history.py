@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
+from pagecheck.common.security.deployment import is_local_development
 
 from pagecheck.persistence.sqlite.history import (
     AuditHistory, AuditNotFound, InvalidHistoryReport,
@@ -19,6 +20,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[4]
 
 def _local_only(request: Request) -> None:
     """Prevent exposing unprotected local reports on a public interface."""
+    if not is_local_development():
+        raise HTTPException(503, "Local history is disabled outside development.")
     try:
         if request.client is not None and ipaddress.ip_address(request.client.host).is_loopback:
             return

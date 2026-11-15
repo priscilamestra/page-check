@@ -3,6 +3,8 @@ import os
 import ipaddress
 from fastapi import APIRouter, HTTPException, Request
 
+from pagecheck.common.security.deployment import live_fetch_enabled
+
 from pagecheck.acquisition.http.fetcher import FetchError
 from pagecheck.acquisition.http.safe_transport import UnsafeDestination
 from pagecheck.api.schemas.audit import PageAuditRequest
@@ -15,7 +17,7 @@ router = APIRouter(prefix="/v1/audits", tags=["audit"])
 
 @router.post("/page")
 def audit_page(payload: PageAuditRequest, request: Request) -> dict:
-    if os.getenv("PAGECHECK_ALLOW_LIVE_FETCH") != "1":
+    if not live_fetch_enabled():
         raise HTTPException(503, "Live URL fetching is disabled. Enable it only for local development.")
     try:
         url = validate_public_url(payload.url)

@@ -1,8 +1,8 @@
 """Rota SEO independente da prévia /v1/pages/inspect."""
 
-import os
-
 from fastapi import APIRouter, HTTPException
+
+from pagecheck.common.security.deployment import live_fetch_enabled
 
 from pagecheck.acquisition.http.fetcher import FetchError
 from pagecheck.acquisition.http.safe_transport import UnsafeDestination
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/v1/audits/seo", tags=["seo"])
 def audit_public_page_seo(payload: SeoAuditRequest) -> dict:
     """Auditoria SEO local por regras determinísticas, sem LLM."""
     # Ainda não habilitar em deploy público: faltam auth, quotas e revisão de SSRF.
-    if os.getenv("PAGECHECK_ALLOW_LIVE_FETCH") != "1":
+    if not live_fetch_enabled():
         raise HTTPException(
             status_code=503,
             detail="Consulta remota desabilitada; habilite apenas no desenvolvimento local.",

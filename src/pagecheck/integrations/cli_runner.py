@@ -50,4 +50,6 @@ def run_local_json_command(engine: str, command: list[str], *, root: Path,
         return (normalize_impeccable(payload) if engine == "impeccable"
                 else normalize_lighthouse(payload))
     except EngineOutputError as exc:
-        return unavailable(engine, f"Detector output format was not recognized ({type(exc).__name__}).")
+        # Surface only the adapter's bounded schema diagnostic, never stdout,
+        # source HTML or detector message values.
+        return unavailable(engine, f"Detector output format was not recognized: {exc}")
