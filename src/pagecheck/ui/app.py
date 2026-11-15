@@ -103,19 +103,19 @@ def render_app() -> None:
     # The native Streamlit "Deploy" button belongs to Streamlit's browser chrome;
     # the connection/tools menu sits at the right edge of app content below it.
     is_production = os.getenv("PAGECHECK_ENV", "local").strip().lower() == "production"
-    heading, tools = st.columns([7, 2], vertical_alignment="top")
+    heading, tools = st.columns([9, 1.6], vertical_alignment="top")
     with heading:
         st.title("Page Check")
         st.caption("Technical, SEO, and conversion-readiness audits · No generative AI")
     with tools:
-        with st.popover("Connection" if is_production else "Connection & tools",
-                        icon=":material/settings:", use_container_width=True):
+        with st.popover("Connection" if is_production else "Tools",
+                        icon=":material/tune:", use_container_width=False):
             st.markdown("**Connection**")
             if _api_health(api_url):
-                st.success("FastAPI connected")
+                st.badge("FastAPI connected", color="green")
             else:
-                st.info("FastAPI offline")
-            st.caption("Live audits require the local API server.")
+                st.badge("FastAPI offline", color="gray")
+            st.caption("Live audits require the API server.")
             if not is_production:
                 with st.expander("Developer tools"):
                     st.caption("HTML audit: SEO, URL parameters, links, CTAs, and forms. "

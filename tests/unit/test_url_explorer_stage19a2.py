@@ -1,0 +1,112 @@
+"""Fast UX contract checks for the compact URL & parameters exploration."""
+from copy import deepcopy
+
+from pagecheck.ui.components.url_explorer import (
+    area_summary, campaign_parameters, check_rows, filter_rows,
+)
+from pagecheck.ui.components.coverage_composition import source_composition_html
+
+
+def sample():
+    return {
+        "requested_url": "https://example.com/landing?utm_source=google&utm_medium=cpc&token=private",
+        "checks": [
+            {"module": "tracking", "status": "passed", "check_id": "utm", "evidence": {"q": "yes"}},
+            {"module": "navigation", "status": "not_verified", "check_id": "nav-1"},
+            {"module": "navigation", "status": "not_verified", "check_id": "nav-2"},
+            {"module": "navigation", "status": "warning", "check_id": "nav-3", "recommendation": "Check href"},
+            {"module": "forms", "status": "failed", "check_id": "form-required"},
+            {"module": "seo", "status": "failed", "check_id": "seo-do-not-include"},
+        ],
+    }
+
+
+def test_utm_count_is_not_a_delivery_claim():
+    info = campaign_parameters(sample())
+    assert (info["utm"], info["total"], info["has_utm"]) == (2, 3, True)
+
+
+def test_sensitive_query_value_is_hidden():
+    params = campaign_parameters(sample())["parameters"]
+    assert params[-1]["Value"] == "[hidden]"
+
+
+def test_no_query_is_neutral():
+    assert campaign_parameters({"requested_url": "https://example.com"}) == {
+        "parameters": [], "total": 0, "utm": 0, "has_utm": False,
+    }
+
+
+def test_duplicate_keys_are_preserved():
+    info = campaign_parameters({"requested_url": "https://x.test/?utm_source=a&utm_source=b"})
+    assert info["utm"] == 2 and len(info["parameters"]) == 2
+
+
+def test_invalid_requested_url_type_is_not_crash():
+    assert campaign_parameters({"requested_url": [1, 2]})["total"] == 0
+
+
+def test_only_relevant_modules_are_shown():
+    assert len(check_rows(sample())) == 5
+
+
+def test_priority_issues_before_unverified():
+    rows = check_rows(sample())
+    assert rows[0]["status"] == "failed"
+    assert rows[1]["status"] == "warning"
+    assert rows[2]["status"] == "not_verified"
+
+
+def test_stable_source_indices_allow_evidence_lookup():
+    rows = check_rows(sample())
+    assert [row["index"] for row in rows] == [4, 3, 1, 2, 0]
+    assert rows[-1]["evidence"] == {"q": "yes"}
+
+
+def test_counts_by_area_include_not_verified():
+    summary = area_summary(check_rows(sample()))
+    assert summary[1]["Not verified"] == 2
+    assert summary[1]["Needs review"] == 1
+    assert summary[2]["Issues"] == 1
+
+
+def test_default_filter_prevents_hundreds_of_initial_cards():
+    rows = check_rows(sample())
+    assert [r["status"] for r in filter_rows(rows)] == ["failed", "warning"]
+
+
+def test_filter_by_status():
+    assert len(filter_rows(check_rows(sample()), status="Not verified")) == 2
+
+
+def test_filter_by_module():
+    assert len(filter_rows(check_rows(sample()), area="Forms", status="All")) == 1
+
+
+def test_text_search_is_case_insensitive():
+    assert len(filter_rows(check_rows(sample()), status="All", search="NAV-2")) == 1
+
+
+def test_empty_check_list_is_safe():
+    assert check_rows({"checks": None}) == []
+
+
+def test_report_not_modified_by_view_helpers():
+    report = sample()
+    original = deepcopy(report)
+    filter_rows(check_rows(report), status="All")
+    campaign_parameters(report)
+    assert report == original
+
+
+def test_one_composition_bar_has_actual_total_and_all_statuses():
+    text = source_composition_html({"completed": 3, "partial": 2, "not_verified": 2})
+    assert text.count('height:29px') == 1
+    assert "Completed: 3 of 7" in text
+    assert "Limited: 2 of 7" in text
+    assert "Not verified: 2 of 7" in text
+
+
+def test_bogus_counts_do_not_create_fake_graph():
+    assert source_composition_html({"completed": True, "partial": -2,
+                                    "not_verified": "5"}) == ""

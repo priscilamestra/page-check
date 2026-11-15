@@ -4,46 +4,24 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 import streamlit as st
 
-from pagecheck.reporting.english_copy import check_copy, team_name
+from pagecheck.reporting.english_copy import check_copy
 from pagecheck.reporting.exports import findings_csv, zip_export
-from pagecheck.ui.components.report_data import (
-    SEVERITY_LABELS, STATUS_LABELS, export_report_json, issue_counts, module_rows,
-    screenshot_entries,
+from pagecheck.ui.components.report_data import export_report_json, issue_counts
+from pagecheck.ui.components.overview_insights import source_counts
+from pagecheck.ui.components.overview_view import render_overview
+from pagecheck.ui.components.issues_view import render_issues
+from pagecheck.ui.components.screenshots_view import render_screenshots
+from pagecheck.ui.components.teams_view import render_teams
+from pagecheck.ui.components.url_explorer import (
+    campaign_parameters, check_rows, area_summary, filter_rows,
 )
-from pagecheck.ui.components.coverage_details import (
-    source_rows, not_verified_by_area, screenshot_kind,
-)
-
-SEVERITY_COLORS = {
-    "critical": "red", "high": "red", "medium": "orange",
-    "low": "yellow", "info": "gray",
-}
-STATUS_COLORS = {
-    "failed": "red", "warning": "orange", "passed": "green",
-    "not_verified": "gray", "not_applicable": "gray",
-}
-
 
 def _score(value: object) -> str:
     if isinstance(value, (int, float)) and not isinstance(value, bool):
         return f"{value:.0f}/100"
     return "Not verified"
-
-
-def _state_counts(state: dict) -> tuple[int, int, int]:
-    engine_states = state.get("engines") or {}
-    visual_states = state.get("visuals") or {}
-    all_states = [state.get("seo"), state.get("conversion"),
-                  *(engine_states.values() if isinstance(engine_states, dict) else []),
-                  *(visual_states.values() if isinstance(visual_states, dict) else [])]
-    return (
-        sum(s == "completed" for s in all_states),
-        sum(s == "partial" for s in all_states),
-        sum(s == "not_verified" for s in all_states),
-    )
 
 
 def render_report(report: dict[str, Any], *, root: Path) -> None:
@@ -56,157 +34,110 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
     if language:
         st.caption(f"Content language: {labels.get(language, language)}"
                    + (" · Target keywords: " + ", ".join(map(str, keywords)) if keywords else ""))
-    if report["status"] == "partial":
-        done, limited, unrun = _state_counts(report.get("source_states") or {})
-        st.info(f"Audit coverage: {done} completed, {limited} run with limits, "
-                f"{unrun} not run. Static screenshots may be available below; "
-                "unrun checks remain **Not verified**.")
-    else:
-        st.success("All applicable audit sources in this run completed.")
-
     counts = issue_counts(report)
+    sources = source_counts(report)
     seo = ((report.get("scores") or {}).get("internal") or {}).get("seo") or {}
     cols = st.columns(4)
-    cols[0].metric("Technical SEO (scored rules)", _score(seo.get("score")))
-    cols[1].metric("Issues", counts["failed"])
+    cols[0].metric("Technical SEO · scored rules", _score(seo.get("score")))
+    cols[1].metric("Issues found", counts["failed"])
     cols[2].metric("Needs review", counts["warning"])
-    cols[3].metric("Not verified", counts["not_verified"])
-    st.caption("SEO score = eligible technical SEO rules only; it does not include "
-               "keyword guidance, accessibility, performance or visual checks. "
-               "Not verified = checks without sufficient evidence, not confirmed defects.")
-    missing_areas = not_verified_by_area(report)
-    if missing_areas:
-        st.caption("Not verified by area: " + ", ".join(
-            f"{area}: {count}" for area, count in missing_areas[:5])
-            + ("; other areas also exist" if len(missing_areas) > 5 else ""))
+    cols[3].metric("Sources completed", f"{sources['completed']}/{sum(sources.values())}")
+    st.caption(
+        "SEO score applies only to eligible technical SEO rules. It does not include "
+        "keyword guidance, accessibility, Lighthouse, or visual checks. "
+        f"{counts['not_verified']} checks are Not verified — these are not confirmed defects."
+    )
+    score_coverage = seo.get("coverage")
+    if (isinstance(score_coverage, (int, float)) and not isinstance(score_coverage, bool)
+            and 0 <= score_coverage <= 1):
+        st.caption(f"SEO scoring-rule coverage: {score_coverage:.0%} of eligible SEO scoring rules. "
+                   "This is not coverage of the whole website.")
+    if seo.get("partial_score") is True:
+        st.warning("SEO scoring was partial. Review the coverage before interpreting this score.")
+    if report["status"] == "partial":
+        st.caption(f"Coverage: {sources['completed']} completed · {sources['partial']} limited · "
+                   f"{sources['not_verified']} source(s) not verified. "
+                   "See Overview for what was and was not inspected.")
 
     tab_summary, tab_journey, tab_issues, tab_visual, tab_teams, tab_data = st.tabs(
         ["Overview", "URLs & parameters", "Issues", "Screenshots", "Teams", "Data"]
     )
     with tab_summary:
-        st.markdown("**Audit sources — what ran, what did not, and why**")
-        coverage = source_rows(report)
-        columns = st.columns(2)
-        for index, source in enumerate(coverage):
-            with columns[index % 2]:
-                with st.container(border=True):
-                    st.markdown(f"**{source['title']}**")
-                    st.badge(source["status_label"],
-                             color=("green" if source["status"] == "completed" else
-                                    "orange" if source["status"] == "partial" else "gray"))
-                    st.caption(source["description"])
-                    if source["reason"]:
-                        st.caption("Details: " + source["reason"])
-        lh = (report.get("scores") or {}).get("lighthouse")
-        if isinstance(lh, dict) and lh:
-            st.markdown("**Lighthouse**")
-            cols = st.columns(4)
-            for col, (key, label) in zip(cols, (
-                ("performance", "Performance"), ("accessibility", "Accessibility"),
-                ("best-practices", "Best practices"), ("seo", "Lighthouse SEO"),
-            )):
-                col.metric(label, _score(lh.get(key)))
-        st.markdown("**Results by area**")
-        rows = module_rows(report)
-        if rows:
-            frame = pd.DataFrame(rows).set_index("Módulo")
-            frame = frame.rename(columns={"Problemas": "Issues", "Atenção": "Needs review",
-                                          "Aprovados": "Passed"})
-            st.bar_chart(frame[["Issues", "Needs review", "Passed"]], horizontal=True)
-            # Values remain readable without hovering over a bar.
-            by_area = report.get("summary", {}).get("by_module", {})
-            visible_counts = []
-            for area, values in sorted(by_area.items()):
-                if isinstance(values, dict):
-                    visible_counts.append({
-                        "Area": area,
-                        "Issues": int(values.get("failed") or 0),
-                        "Needs review": int(values.get("warning") or 0),
-                        "Passed": int(values.get("passed") or 0),
-                        "Not verified": int(values.get("not_verified") or 0),
-                        "Not applicable": int(values.get("not_applicable") or 0),
-                    })
-            if visible_counts:
-                st.dataframe(pd.DataFrame(visible_counts), hide_index=True,
-                             use_container_width=True)
-        else:
-            st.info("No area-level checks available.")
-        with st.expander("Coverage and technical limitations"):
-            st.json(report.get("source_states") or {}, expanded=False)
-            st.caption("The audit covers only the engines actually executed; scores do not predict rankings or conversions.")
+        render_overview(report, root=root)
 
     with tab_journey:
-        st.caption("Observable URL and HTML checks. These do not measure real conversions or analytics events.")
-        related = [item for item in report.get("checks", [])
-                   if item.get("module") in {"tracking", "navigation", "forms"}]
-        if not related:
-            st.info("No URL, link, or form checks are available.")
+        st.markdown("#### URL & campaign parameters")
+        st.caption("Quick summary first. Tracking and links are inspected without submitting "
+                   "forms, executing JavaScript, or confirming analytics delivery.")
+        params = campaign_parameters(report)
+        rows = check_rows(report, describe=check_copy)
+        pcols = st.columns(3)
+        pcols[0].metric("Query parameters", params["total"])
+        pcols[1].metric("UTM parameters", params["utm"])
+        pcols[2].metric("Check records", len(rows))
+        if params["total"]:
+            with st.expander(f"View {params['total']} URL parameter(s)"):
+                st.dataframe(params["parameters"], hide_index=True,
+                             use_container_width=True, height=min(280, 55 + 36 * params["total"]))
         else:
-            for item in related:
-                title, recommendation = check_copy(item)
-                with st.container(border=True):
-                    st.badge(STATUS_LABELS.get(item.get("status"), "Not verified"),
-                             color=STATUS_COLORS.get(item.get("status"), "gray"))
-                    st.markdown(f"**{title}**")
-                    if recommendation:
-                        st.caption(recommendation)
-                    with st.expander("Technical evidence"):
-                        st.json(item.get("evidence") or {}, expanded=False)
+            st.caption("No query parameters in the requested URL. This is not automatically a defect.")
+
+        st.markdown("#### What the checks found")
+        if not rows:
+            st.info("No tracking, navigation, or form checks are available for this report.")
+        else:
+            st.dataframe(area_summary(rows), hide_index=True,
+                         use_container_width=True, height=145)
+            counts = {status: sum(r["status"] == status for r in rows)
+                      for status in ("failed", "warning", "not_verified")}
+            if counts["not_verified"]:
+                st.caption(f"{counts['not_verified']} checks were Not verified. "
+                           "These are missing evidence, not confirmed broken links or defects. "
+                           "Repeated page elements may produce multiple checks.")
+
+            st.markdown("#### Explore individual checks")
+            st.caption("The table stays within a fixed-height area. Filter to find an item; "
+                       "technical evidence appears only when you select a check.")
+            a, b = st.columns(2)
+            with a:
+                area = st.selectbox("Area", ["All", "Tracking", "Navigation", "Forms"],
+                                    key="url_checks_area")
+            with b:
+                status = st.selectbox("Result", ["Needs attention", "All", "Issue", "Needs review",
+                                                  "Not verified", "Passed", "Not applicable"],
+                                      key="url_checks_status")
+            query = st.text_input("Search by check or recommendation", key="url_checks_search")
+            filtered = filter_rows(rows, area=area, status=status, search=query)
+            st.caption(f"Showing {len(filtered)} of {len(rows)} checks. "
+                       "All checks remain available through the filters and exported report.")
+            if filtered:
+                table = [{"Area": r["area"].title(), "Check": r["title"][:100],
+                          "Result": r["label"], "Suggested action": r["recommendation"][:140]}
+                         for r in filtered]
+                st.dataframe(table, hide_index=True, use_container_width=True, height=350)
+                options = {f"{r['index'] + 1} · {r['area'].title()} · {r['title'][:85]}": r
+                           for r in filtered}
+                selected = st.selectbox("Inspect a check", ["Select a check..."] + list(options),
+                                        key="url_checks_detail")
+                if selected in options:
+                    detail = options[selected]
+                    st.markdown(f"**{detail['title']}** · {detail['label']}")
+                    if detail["recommendation"]:
+                        st.write("**Suggested action:** " + detail["recommendation"])
+                    with st.expander("Technical evidence (advanced)"):
+                        st.caption("Source: " + (detail["source"] or "Not specified"))
+                        st.json(detail["evidence"], expanded=False)
+            else:
+                st.info("No checks match these filters. Choose another result or clear the search.")
 
     with tab_issues:
-        findings = report.get("findings") or []
-        if not findings:
-            st.info("No issues were reported by the executed checks. This is not a guarantee of zero issues.")
-        else:
-            st.caption(f"{len(findings)} findings · Automatically sorted by priority · Nothing is hidden")
-            for item in findings:
-                severity_code = str(item.get("severity") or "info")
-                title, recommendation = check_copy(item)
-                with st.container(border=True):
-                    st.badge(f"{SEVERITY_LABELS.get(severity_code, 'Info')} priority",
-                             color=SEVERITY_COLORS.get(severity_code, "gray"))
-                    st.markdown(f"**{title}**")
-                    st.caption(f"{item.get('module', 'Review')} · {team_name(item.get('team'))}")
-                    if recommendation:
-                        st.write(f"**Suggested fix:** {recommendation}")
-                    with st.expander("Technical details"):
-                        st.caption(f"Status: {STATUS_LABELS.get(item.get('status'), 'Not verified')}"
-                                   f" · Source: {item.get('source', 'Unknown')}")
-                        st.json(item.get("evidence") or {}, expanded=False)
+        render_issues(report)
 
     with tab_visual:
-        images = dict(screenshot_entries(report, root))
-        visual_details = {row["id"]: row for row in source_rows(report)
-                          if row["id"] in {"desktop", "mobile"}}
-        for viewport in ("desktop", "mobile"):
-            detail = visual_details[viewport]
-            st.markdown(f"**{viewport.capitalize()} — {detail['status_label']}**")
-            if viewport in images:
-                st.image(str(images[viewport]),
-                         caption=screenshot_kind(report, viewport), use_container_width=True)
-            else:
-                st.info(f"No {viewport} screenshot was captured for this report.")
-            if detail["reason"]:
-                st.caption("Reason / limitation: " + detail["reason"])
-        st.caption("Screenshots use a guarded static browser with JavaScript disabled. "
-                   "A first-viewport image is partial evidence, not a full visual audit. "
-                   "Blocked resources are not confirmed page defects.")
+        render_screenshots(report, root=root)
 
     with tab_teams:
-        actions = report.get("actions_by_team") or []
-        if not actions:
-            st.info("No team actions are available for these checks.")
-        for team in actions:
-            if not isinstance(team, dict):
-                continue
-            with st.expander(f"{team_name(team.get('team'))} · {team.get('count', 0)} actions", expanded=True):
-                for task in team.get("actions") or []:
-                    if not isinstance(task, dict):
-                        continue
-                    title, recommended = check_copy({**task, "check_id": task.get("check_id")})
-                    st.markdown(f"**{title}** · "
-                                f"{SEVERITY_LABELS.get(task.get('priority'), 'Review')}")
-                    st.caption(recommended or "Review the associated finding and its evidence.")
+        render_teams(report)
 
     with tab_data:
         st.download_button(
