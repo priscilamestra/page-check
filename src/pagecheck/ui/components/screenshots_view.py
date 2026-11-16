@@ -1,4 +1,4 @@
-"""Bounded side-by-side visual evidence; original images and status are unchanged."""
+"""Desktop/mobile evidence with direct downloads and truthful capture scope."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,41 +10,50 @@ from pagecheck.ui.components.visual_explorer import visual_cards, visual_observa
 
 
 def render_screenshots(report: dict[str, Any], *, root: Path) -> None:
-    st.markdown("#### Screenshots and visual evidence")
-    st.caption("These images come from a guarded static browser with JavaScript disabled. "
-               "A first-viewport capture is partial evidence, not a full visual audit.")
+    st.markdown("#### Page screenshots")
     cards = visual_cards(report, root)
-    columns = st.columns([1.5, 1])
+    columns = st.columns(2, gap="medium")
     for column, card in zip(columns, cards):
         with column:
             with st.container(border=True):
-                st.markdown(f"**{card['title']}**")
-                color = ("green" if card["status"] == "completed" else
-                         "orange" if card["status"] == "partial" else "gray")
-                st.badge(card["status_label"], color=color)
-                st.caption(card["kind"])
-                if card["path"]:
-                    # Tall screenshots must never expand the whole Streamlit page.
-                    with st.container(height=360, border=False):
-                        st.image(str(card["path"]), use_container_width=True)
+                header, status = st.columns([2, 1], vertical_alignment="center")
+                header.markdown(f"**{card['title']}**")
+                status.badge(card["status_label"], color=(
+                    "green" if card["status"] == "completed" else
+                    "orange" if card["status"] == "partial" else "gray"
+                ))
+                image_path = card["path"]
+                if image_path:
+                    # Only allow paths already vetted by visual_cards/safe_screenshot_path.
+                    with st.container(height=400, border=False):
+                        st.image(str(image_path), use_container_width=True)
+                    try:
+                        png = image_path.read_bytes()
+                    except OSError:
+                        st.warning("Screenshot unavailable for download.")
+                    else:
+                        st.download_button(
+                            f"Download {card['title'].lower()} screenshot (PNG)", png,
+                            file_name=f"pagecheck_{card['viewport']}.png", mime="image/png",
+                            use_container_width=True,
+                        )
+                    if card["annotated"]:
+                        st.caption("This capture includes the annotations available in the report.")
                 else:
-                    st.info("No screenshot was captured. Visual quality was not verified.")
-                if card["is_partial"]:
-                    st.caption("Only limited visual evidence is available for this device.")
-                if card["reason"]:
-                    with st.expander("Capture limitation"):
-                        st.write(card["reason"])
+                    st.info("No screenshot available for this device.")
+
                 observations = visual_observations(report, card["viewport"])
                 if observations:
-                    st.caption(f"{len(observations)} reported observations linked to this viewport. "
-                               "They are not necessarily annotated in the image.")
-                    with st.expander("View linked findings"):
+                    with st.expander(f"Related observations ({len(observations)})"):
                         for finding in observations[:20]:
                             st.write(f"{finding['severity'].title()}: {finding['title']}")
                         if len(observations) > 20:
-                            st.caption("Additional findings remain in Issues and the report export.")
-                elif not card["annotated"]:
-                    st.caption("No confirmed visual issue markers are attached to this capture.")
-    st.caption("Screenshots do not prove that forms, menus or analytics work. "
-               "Blocked resources are not confirmed page defects. Original files remain "
-               "in the audit history and ZIP export.")
+                            st.caption("Additional findings are available in Issues.")
+                if card["reason"]:
+                    with st.expander("Capture details"):
+                        st.write(card["reason"])
+                elif card["is_partial"]:
+                    st.caption("Partial screenshot — not a full-page visual audit.")
+
+    st.caption("Only confirmed annotations included in the report are displayed. "
+               "An unmarked screenshot does not mean the page has no issues.")

@@ -8,15 +8,14 @@ import httpx
 import streamlit as st
 
 from pagecheck.ui.components.report_data import (
-    OBJECTIVE_LABELS, local_demo_report, parse_uploaded_report, validate_report,
+    OBJECTIVE_LABELS, parse_uploaded_report, validate_report,
 )
 from pagecheck.ui.components.report_view import render_report
 from pagecheck.ui.history_labels import history_option_label
 from pagecheck.ui.browser_recovery import browser_recovery
 from pagecheck.ui.temporary_client import (
-    TemporaryRecoveryUnavailable, save_temporary, restore_temporary, revoke_temporary,
+    TemporaryRecoveryUnavailable, save_temporary, restore_temporary,
 )
-from pagecheck.ui.github_link import normalize_github_repository_url
 from pagecheck.ui.history_resume import (
     clear_active_audit, remember_active_audit, resume_active_audit,
 )
@@ -141,48 +140,14 @@ def render_app() -> None:
         st.title("Page Check")
         st.caption("Technical, SEO, and conversion-readiness audits · No generative AI")
     with tools:
-        with st.popover("Connection" if is_production else "Tools",
-                        icon=":material/tune:", use_container_width=False):
+        # Keep operational diagnostics internal: the user only needs to know
+        # whether the auditing API can be reached.
+        with st.popover("Tools", icon=":material/tune:"):
             st.markdown("**Connection**")
             if _api_health(api_url):
                 st.badge("FastAPI connected", color="green")
             else:
                 st.badge("FastAPI disconnected", color="gray")
-            # Star opens GitHub itself; no account, tracking, or GitHub API is used.
-            # Do not expose an incomplete or malformed repository URL publicly.
-            github_url = normalize_github_repository_url(
-                os.getenv("PAGECHECK_GITHUB_REPO_URL", "")
-            )
-            if github_url:
-                st.link_button(
-                    "Star on GitHub", github_url,
-                    icon=":material/star:", type="tertiary",
-                    help="Open the public repository to use GitHub's Star button.",
-                )
-            elif not is_production:
-                st.button(
-                    "Star on GitHub", icon=":material/star:",
-                    type="tertiary", disabled=True,
-                    help="Enabled after PAGECHECK_GITHUB_REPO_URL points to the public repository.",
-                )
-            if not is_production:
-                with st.expander("Developer tools"):
-                    st.caption("HTML audit: SEO, URL parameters, links, CTAs, and forms. "
-                               "Browser capture is optional and requires local opt-in; "
-                               "static external engines require PAGECHECK_ALLOW_LOCAL_STATIC_ENGINES=1; "
-                               "Lighthouse is limited to trusted local fixtures.")
-                    if st.button("Load sample report"):
-                        try:
-                            clear_active_audit(st.session_state, st.query_params)
-                            if use_postgres:
-                                st.session_state.pop("pagecheck_recovery_token", None)
-                                st.session_state["pagecheck_browser_clear"] = True
-                            st.session_state["pagecheck_report"] = local_demo_report(ROOT)
-                            st.session_state["pagecheck_origin"] = "Sample data · not a live audit"
-                            st.session_state.pop("pagecheck_history_notice", None)
-                            st.rerun()
-                        except (FileNotFoundError, ValueError) as exc:
-                            st.error(str(exc))
 
     st.subheader("New audit")
     if is_production:
@@ -215,14 +180,8 @@ def render_app() -> None:
                  "they do not replace technical SEO checks or query Google rankings.",
         )
         run = st.form_submit_button("Audit page", type="primary", disabled=is_production)
-    st.caption(
-        "Checks available in this flow: technical SEO, selected-language and keyword "
-        "alignment, URL parameters, links, CTAs, and HTML forms. "
-        "Desktop/mobile screenshots are added only when the local FastAPI "
-        "has PAGECHECK_ALLOW_LIVE_BROWSER=1. JavaScript remains disabled. "
-        "Static external engine checks require an explicit local opt-in; "
-        "Lighthouse is not run against arbitrary public URLs."
-    )
+    st.caption("Scan a public page for SEO, navigation and conversion issues. "
+               "Your report will show what could be checked.")
     if run:
         if not url.strip() or len(niche.strip()) < 2:
             st.error("Enter a valid public URL and an industry or niche.")
@@ -342,27 +301,20 @@ def render_app() -> None:
                         except httpx.HTTPError as exc:
                             st.error(f"Could not delete saved audit: {exc}")
 
-    elif st.session_state.get("pagecheck_recovery_token"):
-        st.caption("Only this browser's latest audit can be restored for up to 24 hours.")
-        if st.button("Forget this audit on this browser", type="tertiary"):
-            token = st.session_state.pop("pagecheck_recovery_token")
-            try:
-                revoke_temporary(api_url, token)
-            except TemporaryRecoveryUnavailable:
-                pass
-            st.session_state["pagecheck_browser_clear"] = True
-            st.session_state.pop("pagecheck_report", None)
-            st.session_state.pop("pagecheck_origin", None)
-            st.session_state.pop("pagecheck_history_notice", None)
-            st.rerun()
-
-    if st.session_state.get("pagecheck_history_notice"):
-        st.caption(st.session_state["pagecheck_history_notice"])
+    notice = st.session_state.get("pagecheck_history_notice")
+    if notice and not (
+        use_postgres and notice == "Audit recoverable for 24 hours on this browser."
+    ):
+        st.caption(notice)
 
     report = st.session_state.get("pagecheck_report")
     if isinstance(report, dict):
         st.divider()
-        st.caption(st.session_state.get("pagecheck_origin", "Loaded audit report"))
+        origin = st.session_state.get("pagecheck_origin", "")
+        # Distinguish sample/imported results from live results, without
+        # repeating the browser persistence mechanism on every page view.
+        if origin.startswith(("Sample", "Imported")):
+            st.caption(origin)
         render_report(report, root=ROOT)
     else:
         st.info("Enter a public URL, choose the content language, and add target keywords to begin.")

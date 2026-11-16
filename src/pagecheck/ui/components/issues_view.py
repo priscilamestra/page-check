@@ -1,78 +1,136 @@
-"""Streamlit presentation of Stage 19B's bounded issue explorer."""
+"""Compact, prioritized findings for a non-technical reader.
+
+The underlying findings, severity and evidence remain unchanged. The screen
+shows actionable items first and explains recorded evidence in readable labels.
+"""
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any
 
 import streamlit as st
 
 from pagecheck.reporting.english_copy import check_copy, team_name
-from pagecheck.ui.components.table_sizing import compact_table_height
 from pagecheck.ui.components.issues_explorer import (
-    filter_findings, finding_rows, finding_summary, findings_table,
+    filter_findings, finding_rows, finding_summary, finding_evidence_summary,
 )
 
 
+_PRIORITY_COLORS = {
+    "critical": "red", "high": "red", "medium": "orange", "low": "gray", "info": "gray",
+}
+
+
+def _small_note(value: str, limit: int = 165) -> str:
+    """Bound long automated explanations without modifying the source report."""
+    text = " ".join(str(value or "").split())
+    return text if len(text) <= limit else text[:limit - 1].rstrip() + "…"
+
+
 def render_issues(report: dict[str, Any]) -> None:
-    st.markdown("#### Findings and recommended fixes")
-    st.caption("Start with actionable items. Filter or search for details; the full report "
-               "and original evidence are retained for export.")
+    st.markdown("#### Issues & recommendations")
     rows = finding_rows(report, describe=check_copy, team_label=team_name)
     summary = finding_summary(rows)
-    cols = st.columns(4)
-    cols[0].metric("Issues detected", summary["issues"])
-    cols[1].metric("Needs review", summary["reviews"])
-    cols[2].metric("Critical issues", summary["critical_issues"])
-    cols[3].metric("Areas affected", summary["areas_affected"])
+
+    a, b, c = st.columns(3)
+    a.metric("Confirmed issues", summary["issues"])
+    b.metric("Needs review", summary["reviews"])
+    c.metric("Areas affected", summary["areas_affected"])
+
     if not rows:
-        st.info("No findings were reported by completed checks. "
-                "This does not guarantee the page has no problems.")
+        st.info("No findings were reported by completed checks.")
         return
 
-    areas = ["All"] + [area.title() for area in sorted({row["area"] for row in rows})]
-    first, second, third = st.columns([1.3, 1.5, 1])
-    with first:
-        area = st.selectbox("Area", areas, key="issues_area_19b")
-    with second:
+    # Offer only populated areas/results. Searching partial free-text and empty
+    # filter combinations made the audit harder to understand.
+    area_counts = Counter(row["area"] for row in rows)
+    areas = ["All"] + sorted(area_counts)
+    left, right = st.columns(2)
+    with left:
+        area = st.selectbox(
+            "Area", areas, key="issues_area_simple_v3",
+            format_func=lambda value: (
+                f"All areas ({len(rows)})" if value == "All"
+                else f"{value.replace('_', ' ').title()} ({area_counts[value]})"
+            ),
+        )
+    scoped_rows = [r for r in rows if area == "All" or r["area"] == area]
+    status_counts = Counter(r["status"] for r in scoped_rows)
+    attention_count = status_counts["failed"] + status_counts["warning"]
+    status_options = ["All"]
+    if attention_count:
+        status_options.insert(0, "Needs attention")
+    for raw, label in (("failed", "Issue"), ("warning", "Needs review"),
+                       ("passed", "Passed"), ("not_verified", "Not verified"),
+                       ("not_applicable", "Not applicable")):
+        if status_counts[raw]:
+            status_options.append(label)
+    label_for_status = {
+        "failed": "Issue", "warning": "Needs review", "passed": "Passed",
+        "not_verified": "Not verified", "not_applicable": "Not applicable",
+    }
+    count_for_label = {label: status_counts[raw] for raw, label in label_for_status.items()}
+    with right:
         result = st.selectbox(
-            "Result", ["Needs attention", "All", "Issue", "Needs review",
-                       "Not verified", "Passed", "Not applicable"],
-            key="issues_result_19b",
+            "Result", status_options,
+            key=f"issues_result_simple_v3_{area}",
+            format_func=lambda value: (
+                f"All results ({len(scoped_rows)})" if value == "All"
+                else (f"Needs attention ({attention_count})" if value == "Needs attention"
+                      else f"{value} ({count_for_label[value]})")
+            ),
         )
-    with third:
-        priority = st.selectbox(
-            "Priority", ["All", "Critical", "High", "Medium", "Low", "Info"],
-            key="issues_priority_19b",
-        )
-    query = st.text_input("Find a problem or recommendation", placeholder="Search findings...",
-                          key="issues_search_19b")
-    visible = filter_findings(rows, area=area, result=result, priority=priority, search=query)
-    st.caption(f"Showing {len(visible)} of {summary['total']} findings. "
-               "Needs review does not mean a confirmed failure.")
+    visible = filter_findings(rows, area=area, result=result, priority="All", search="")
     if not visible:
-        st.info("No findings match these filters. Change the filters or clear the search.")
+        st.info("No findings match these filters.")
         return
-    st.dataframe(findings_table(visible), hide_index=True,
-                 use_container_width=True, height=compact_table_height(len(visible), max_height=400))
-    options = {item["index"]: item for item in visible}
-    selected = st.selectbox(
-        "Inspect a finding", [None] + list(options),
-        format_func=lambda value: "Select a finding for guidance and evidence" if value is None
-        else f"{options[value]['severity_label']} · {options[value]['title'][:95]}",
-        key="issues_selected_19b",
-    )
-    if selected is None:
-        st.caption("Select a finding above to see why it matters and what to do. "
-                   "Source JSON stays closed unless requested.")
-        return
-    row = options[selected]
-    with st.container(border=True):
-        st.markdown(f"**{row['title']}**")
-        st.caption(f"{row['area'].replace('_',' ').title()} · {row['team']} · "
-                   f"{row['severity_label']} priority · {row['result']}")
-        st.markdown("**Suggested next step**")
-        st.write(row["recommendation"] or "Review this observation and verify the live page behavior.")
-        if row["status"] == "warning":
-            st.caption("This item requires human review and is not a confirmed page defect.")
-        with st.expander("Technical evidence (advanced)"):
-            st.caption(f"Source: {row['source']} · Rule: {row['check_id'] or 'Not recorded'}")
-            st.json(row["evidence"], expanded=False)
+
+    # Pagination keeps the page short without hiding any matching finding.
+    shown = visible[:10]
+    if len(visible) > 10:
+        page_count = (len(visible) + 9) // 10
+        page = st.selectbox("Page", range(1, page_count + 1), key="issues_page_ux")
+        start = (page - 1) * 10
+        shown = visible[start:start + 10]
+        st.caption(f"Showing {start + 1}–{start + len(shown)} of {len(visible)} findings")
+
+    for row in shown:
+        with st.container(border=True):
+            body, status_col = st.columns([5, 1.5], vertical_alignment="top")
+            with body:
+                st.markdown(f"**{row['title']}**")
+                st.caption(row["area"].replace("_", " ").title())
+            with status_col:
+                st.badge(
+                    f"{row['severity_label']} · {row['result']}",
+                    color=(_PRIORITY_COLORS[row["severity"]] if row["status"] == "failed"
+                           else ("gray" if row["severity"] in {"low", "info"} else "orange")),
+                )
+            # The fix appears once, not both here and again in the details.
+            if row["status"] in {"failed", "warning"}:
+                st.markdown("**Suggested change**")
+                st.write(row["recommendation"] or
+                         "Review this finding against the affected page element.")
+            elif row["status"] == "passed":
+                st.caption("Check passed · no change needed")
+            elif row["status"] == "not_verified":
+                st.caption("Not verified · the scan did not establish a result")
+            else:
+                st.caption("Not applicable to this page")
+
+            evidence = finding_evidence_summary(row["evidence"])
+            with st.expander("What was found and where"):
+                if evidence:
+                    for label, value in evidence:
+                        st.markdown(f"**{label}**")
+                        st.text(value)
+                else:
+                    st.caption(
+                        "The audit did not provide a usable element location or observed "
+                        "value for this finding, so it cannot yet point to the exact "
+                        "place to make the change."
+                    )
+                if row["check_id"]:
+                    st.caption(f"Check: {row['check_id']}")
+                if row["source"] and row["source"] != "Unknown":
+                    st.caption(f"Evidence source: {row['source']}")

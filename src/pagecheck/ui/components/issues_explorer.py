@@ -100,3 +100,58 @@ def findings_table(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
         "Finding": row["title"][:120], "Result": row["result"],
         "Suggested action": row["recommendation"][:140] or "Review the evidence",
     } for row in rows]
+
+
+# User-facing labels for evidence already produced by the audit. Do not infer
+# selectors, statuses or failed page elements when the scan did not collect them.
+_EVIDENCE_KEYS = (
+    ("page_url", "Page URL"), ("url", "URL"),
+    ("target_url", "Target URL"), ("href", "Link destination"),
+    ("destination", "Destination"), ("src", "Image source"),
+    ("image_url", "Image URL"), ("selector", "Element selector"),
+    ("dom_path", "DOM location"), ("xpath", "Element location"),
+    ("element_html", "Element HTML"), ("outer_html", "Element HTML"),
+    ("tag_name", "HTML tag"), ("tag", "HTML tag"),
+    ("text", "Element text"), ("link_text", "Link text"),
+    ("attribute", "Attribute"), ("actual", "Observed value"),
+    ("actual_value", "Observed value"), ("observed", "Observed value"),
+    ("value", "Recorded value"), ("expected", "Expected value"),
+    ("expected_value", "Expected value"),
+    ("status_code", "HTTP status"), ("http_status", "HTTP status"),
+    ("reason", "Reason"), ("message", "Diagnostic detail"),
+    ("snippet", "HTML excerpt"),
+)
+
+
+def finding_evidence_summary(evidence: object, *, limit: int = 6) -> list[tuple[str, str]]:
+    """Present only recorded, recognizable diagnostic evidence without guessing.
+
+    Produces bounded, plain text for Streamlit st.text. Other raw fields still
+    exist in the saved/exported report; the view never changes the source data.
+    """
+    if not isinstance(evidence, Mapping):
+        return []
+    result: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    # Real reports may nest element details in a local dictionary. Read at
+    # most one level; never flatten arbitrary data or echo unknown fields.
+    sources = [evidence]
+    for key in ("element", "location", "details", "response"):
+        nested = evidence.get(key)
+        if isinstance(nested, Mapping):
+            sources.append(nested)
+    for key, label in _EVIDENCE_KEYS:
+        for source in sources:
+            value = source.get(key)
+            if value is None or isinstance(value, bool):
+                continue
+            if not isinstance(value, (str, int, float)):
+                continue
+            string_value = " ".join(str(value).split())
+            if not string_value or string_value in seen:
+                continue
+            seen.add(string_value)
+            result.append((label, string_value[:500] + ("…" if len(string_value) > 500 else "")))
+            if len(result) >= limit:
+                return result
+    return result

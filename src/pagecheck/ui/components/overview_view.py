@@ -13,14 +13,12 @@ from typing import Any
 import streamlit as st
 
 from pagecheck.reporting.english_copy import check_copy
-from pagecheck.reporting.exports import zip_export
-from pagecheck.ui.components.coverage_composition import source_composition_html
 from pagecheck.ui.components.coverage_details import source_rows
 from pagecheck.ui.components.overview_dashboard import (
-    OVERVIEW_STYLES, area_chart_html, findings_html, metric_cards_html,
+    OVERVIEW_STYLES, findings_html, metric_cards_html,
 )
 from pagecheck.ui.components.overview_insights import (
-    actionable_rows, missing_evidence_rows, prioritized_findings, source_counts,
+    prioritized_findings, source_counts,
 )
 from pagecheck.ui.components.report_data import issue_counts
 
@@ -32,16 +30,7 @@ def _mapping(value: object) -> Mapping[str, Any]:
 def render_overview(report: dict[str, Any], *, root: Path, zip_data: bytes | None = None) -> None:
     """Single-page summary; heavy evidence stays in Issues/Screenshots/Data."""
     st.markdown(OVERVIEW_STYLES, unsafe_allow_html=True)
-    heading, download = st.columns([5, 2], vertical_alignment="center")
-    with heading:
-        st.markdown("#### Audit overview")
-    with download:
-        st.download_button(
-            "Download report (ZIP)", zip_data if zip_data is not None else zip_export(report, root),
-            file_name="pagecheck_report.zip", mime="application/zip",
-            use_container_width=True,
-        )
-    # Visual evidence remains in the dedicated Screenshots tab.
+    st.markdown("#### Audit overview")
 
     summary = issue_counts(report)
     coverage = source_counts(report)
@@ -66,26 +55,9 @@ def render_overview(report: dict[str, Any], *, root: Path, zip_data: bytes | Non
                 "area": item.get("module"),
             })
         st.markdown(findings_html(prepared), unsafe_allow_html=True)
-        st.caption("Open **Issues** to inspect all findings, evidence and full recommendations.")
     else:
         st.caption("No issues or review items were reported by the checks that ran. "
                    "Unchecked areas are not assumed to pass.")
-
-    left, right = st.columns([1.35, 1], gap="medium")
-    with left:
-        st.markdown("#### Findings by area")
-        by_area = actionable_rows(report)
-        if by_area:
-            st.markdown(area_chart_html(by_area), unsafe_allow_html=True)
-            if len(by_area) > 6:
-                st.caption(f"Showing the 6 busiest of {len(by_area)} areas; see **Issues** for all findings.")
-        else:
-            st.caption("No actionable findings in the checks that ran.")
-    with right:
-        st.markdown("#### Audit coverage")
-        st.markdown(source_composition_html(coverage), unsafe_allow_html=True)
-        st.caption("Completed, limited and unavailable sources are kept separate. "
-                   "This is not a score for the entire website.")
 
     with st.expander("What was checked? · coverage details"):
         st.dataframe(
@@ -94,15 +66,5 @@ def render_overview(report: dict[str, Any], *, root: Path, zip_data: bytes | Non
              for row in source_rows(report)],
             hide_index=True, use_container_width=True, height=292,
         )
-        missing = missing_evidence_rows(report)
-        if missing:
-            total = sum(row["total"] for row in missing)
-            st.caption(f"{total} individual checks were not verified. "
-                       "These are missing evidence, not confirmed defects.")
-        score_coverage = seo.get("coverage")
-        if (isinstance(score_coverage, (int, float))
-                and not isinstance(score_coverage, bool) and 0 <= score_coverage <= 1):
-            st.caption(f"Technical SEO score covers {score_coverage:.0%} of eligible SEO "
-                       "scoring rules—not the entire website, accessibility or visual quality.")
-        if seo.get("partial_score") is True:
-            st.caption("The technical SEO score is partial because not all eligible rules were verified.")
+        # Coverage limitations remain available in the structured source table;
+        # avoid duplicating them as long technical captions below the chart.

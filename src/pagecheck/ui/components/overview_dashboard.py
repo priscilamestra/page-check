@@ -42,6 +42,9 @@ OVERVIEW_STYLES = """
  font-size:.72rem;font-weight:650;border:1px solid rgba(135,145,160,.24)}
 .pc-pill-issue{color:#f5a0a7;background:rgba(223,78,96,.13)}
 .pc-pill-review{color:#eac080;background:rgba(225,163,71,.14)}
+.pc-pill-review-low{color:#b9c0ca;background:rgba(130,140,152,.14)}
+.pc-coverage-key{display:flex;flex-wrap:wrap;gap:5px 11px;margin-top:9px;font-size:.72rem;line-height:1.3}
+.pc-coverage-key span{white-space:nowrap}.pc-key-dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px;vertical-align:middle}
 .pc-area-chart{border:1px solid rgba(135,145,160,.25);border-radius:12px;
  padding:15px 17px 6px;background:var(--secondary-background-color,rgba(120,120,120,.08));margin:6px 0 8px}
 .pc-area-row{display:grid;grid-template-columns:minmax(95px,1fr) minmax(90px,2fr) auto;
@@ -115,14 +118,18 @@ def metric_cards_html(
         f'<div class="pc-kpi-main pc-kpi-value-amber">{_nonnegative(reviews)}</div>'
         '<div class="pc-kpi-note">Not confirmed defects</div></div>'
         '<div class="pc-kpi"><div class="pc-kpi-label">Sources completed</div>'
-        f'<div class="pc-kpi-main pc-kpi-value-green">{source_label}</div>'
+        f'<div class="pc-kpi-main">{source_label}</div>'
         '<div class="pc-progress" role="img" aria-label="'
         f'{completed} completed, {partial} limited, {not_verified} not verified">'
         f'<span class="pc-progress-ok" style="width:{done_width:.3f}%"></span>'
         f'<span class="pc-progress-partial" style="width:{partial_width:.3f}%"></span>'
         f'<span class="pc-progress-missing" style="width:{missing_width:.3f}%"></span>'
         '</div>'
-        f'<div class="pc-kpi-note">{partial} limited · {not_verified} not verified</div></div>'
+        '<div class="pc-coverage-key">'
+        f'<span><i class="pc-key-dot" style="background:#269d80"></i>{completed} completed</span>'
+        f'<span><i class="pc-key-dot" style="background:#d49a45"></i>{partial} limited</span>'
+        f'<span><i class="pc-key-dot" style="background:#8492a8"></i>{not_verified} not verified</span>'
+        '</div></div>'
         '</section>'
     )
 
@@ -136,6 +143,8 @@ def findings_html(rows: Sequence[Mapping[str, Any]]) -> str:
         status = row.get("status")
         issue = status == "failed"
         label = "Issue" if issue else "Needs review"
+        severity_name = str(row.get("severity") or "info").lower()
+        pill_style = ("issue" if issue else ("review-low" if severity_name in {"low", "info"} else "review"))
         severity = _safe_text(str(row.get("severity") or "info").title(), 35)
         area = _safe_text(_area_label(row.get("area")), 70)
         title = _safe_text(row.get("title") or "Untitled finding", 130)
@@ -145,7 +154,7 @@ def findings_html(rows: Sequence[Mapping[str, Any]]) -> str:
             f'<div class="pc-finding-title">{title}</div>'
             + (f'<div class="pc-finding-summary">{recommendation}</div>' if recommendation else '')
             + f'<div class="pc-finding-meta">{area}</div></div>'
-            f'<div><span class="pc-pill pc-pill-{"issue" if issue else "review"}">'
+            f'<div><span class="pc-pill pc-pill-{pill_style}">'
             f'{severity} · {label}</span></div></div>'
         )
     parts.append('</section>')
