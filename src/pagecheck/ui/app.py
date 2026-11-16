@@ -12,6 +12,7 @@ from pagecheck.ui.components.report_data import (
 )
 from pagecheck.ui.components.report_view import render_report
 from pagecheck.ui.history_labels import history_option_label
+from pagecheck.ui.github_link import normalize_github_repository_url
 from pagecheck.ui.history_resume import (
     clear_active_audit, remember_active_audit, resume_active_audit,
 )
@@ -116,8 +117,24 @@ def render_app() -> None:
             if _api_health(api_url):
                 st.badge("FastAPI connected", color="green")
             else:
-                st.badge("FastAPI offline", color="gray")
-            st.caption("Live audits require the API server.")
+                st.badge("FastAPI disconnected", color="gray")
+            # Star opens GitHub itself; no account, tracking, or GitHub API is used.
+            # Do not expose an incomplete or malformed repository URL publicly.
+            github_url = normalize_github_repository_url(
+                os.getenv("PAGECHECK_GITHUB_REPO_URL", "")
+            )
+            if github_url:
+                st.link_button(
+                    "Star on GitHub", github_url,
+                    icon=":material/star:", type="tertiary",
+                    help="Open the public repository to use GitHub's Star button.",
+                )
+            elif not is_production:
+                st.button(
+                    "Star on GitHub", icon=":material/star:",
+                    type="tertiary", disabled=True,
+                    help="Enabled after PAGECHECK_GITHUB_REPO_URL points to the public repository.",
+                )
             if not is_production:
                 with st.expander("Developer tools"):
                     st.caption("HTML audit: SEO, URL parameters, links, CTAs, and forms. "
