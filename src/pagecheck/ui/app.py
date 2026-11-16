@@ -12,6 +12,10 @@ from pagecheck.ui.components.report_data import (
 )
 from pagecheck.ui.components.report_view import render_report
 from pagecheck.ui.history_labels import history_option_label
+from pagecheck.ui.browser_recovery import browser_recovery
+from pagecheck.ui.temporary_client import (
+    TemporaryRecoveryUnavailable, save_temporary, restore_temporary, revoke_temporary,
+)
 from pagecheck.ui.github_link import normalize_github_repository_url
 from pagecheck.ui.history_resume import (
     clear_active_audit, remember_active_audit, resume_active_audit,
@@ -89,17 +93,43 @@ def render_app() -> None:
                        initial_sidebar_state="collapsed")
 
     api_url = os.getenv("PAGECHECK_API_URL", "http://127.0.0.1:8000").rstrip("/")
-    try:
-        resume_active_audit(
-            st.session_state, st.query_params,
-            lambda audit_id: _load_history(api_url, audit_id),
+    storage_backend = os.getenv("PAGECHECK_STORAGE_BACKEND", "sqlite").strip().lower()
+    use_postgres = storage_backend == "postgres_temporary"
+    if use_postgres:
+        # Local SQLite audit IDs are not bearer tokens. Never reuse ?audit= for
+        # PostgreSQL recovery; the secret stays in browser localStorage.
+        if "audit" in st.query_params:
+            del st.query_params["audit"]
+        known_token = st.session_state.get("pagecheck_recovery_token")
+        pending_set = st.session_state.pop("pagecheck_browser_set", None)
+        pending_clear = st.session_state.pop("pagecheck_browser_clear", False)
+        browser_token = browser_recovery(
+            known_token=known_token, set_token=pending_set, clear=pending_clear,
         )
-    except (httpx.HTTPError, ValueError, KeyError):
-        clear_active_audit(st.session_state, st.query_params)
-        st.warning(
-            "The last opened saved audit is no longer available. "
-            "Choose another report from history."
-        )
+        if (not pending_clear and not pending_set and browser_token
+                and browser_token != known_token):
+            try:
+                restored = restore_temporary(api_url, browser_token, ROOT)
+                st.session_state["pagecheck_report"] = validate_report(restored)
+                st.session_state["pagecheck_origin"] = "Recovered temporary audit · up to 24 hours"
+                st.session_state["pagecheck_recovery_token"] = browser_token
+            except (TemporaryRecoveryUnavailable, ValueError, KeyError):
+                st.session_state["pagecheck_browser_clear"] = True
+                st.session_state.pop("pagecheck_recovery_token", None)
+                st.warning("The previous audit is unavailable or has expired. Run a new audit.")
+                st.rerun()
+    else:
+        try:
+            resume_active_audit(
+                st.session_state, st.query_params,
+                lambda audit_id: _load_history(api_url, audit_id),
+            )
+        except (httpx.HTTPError, ValueError, KeyError):
+            clear_active_audit(st.session_state, st.query_params)
+            st.warning(
+                "The last opened saved audit is no longer available. "
+                "Choose another report from history."
+            )
     # Native top-of-page popover: no sidebar and no fragile toolbar CSS hacks.
     # The native Streamlit "Deploy" button belongs to Streamlit's browser chrome;
     # the connection/tools menu sits at the right edge of app content below it.
@@ -144,6 +174,9 @@ def render_app() -> None:
                     if st.button("Load sample report"):
                         try:
                             clear_active_audit(st.session_state, st.query_params)
+                            if use_postgres:
+                                st.session_state.pop("pagecheck_recovery_token", None)
+                                st.session_state["pagecheck_browser_clear"] = True
                             st.session_state["pagecheck_report"] = local_demo_report(ROOT)
                             st.session_state["pagecheck_origin"] = "Sample data · not a live audit"
                             st.session_state.pop("pagecheck_history_notice", None)
@@ -209,14 +242,34 @@ def render_app() -> None:
                         "Live HTML audit · visual evidence captured (limited)" if visual_done
                         else "Live HTML audit · visual checks not verified"
                     )
-                    try:
-                        saved_id = _save_history(api_url, st.session_state["pagecheck_report"])
-                        remember_active_audit(st.session_state, st.query_params, saved_id)
-                        st.session_state["pagecheck_history_notice"] = (
-                            f"Audit saved to local history ({saved_id[:8]})."
-                        )
-                    except ValueError as exc:
-                        st.session_state["pagecheck_history_notice"] = str(exc)
+                    if use_postgres:
+                        try:
+                            token = save_temporary(
+                                api_url, st.session_state["pagecheck_report"],
+                                previous_token=st.session_state.get("pagecheck_recovery_token"),
+                            )
+                            restored = restore_temporary(api_url, token, ROOT)
+                            st.session_state["pagecheck_report"] = validate_report(restored)
+                            st.session_state["pagecheck_recovery_token"] = token
+                            st.session_state["pagecheck_browser_set"] = token
+                            st.session_state["pagecheck_history_notice"] = (
+                                "Audit recoverable for 24 hours on this browser."
+                            )
+                            st.rerun()
+                        except (TemporaryRecoveryUnavailable, ValueError, KeyError):
+                            st.session_state["pagecheck_history_notice"] = (
+                                "Audit completed, but temporary recovery is unavailable. "
+                                "Download the report before leaving this page."
+                            )
+                    else:
+                        try:
+                            saved_id = _save_history(api_url, st.session_state["pagecheck_report"])
+                            remember_active_audit(st.session_state, st.query_params, saved_id)
+                            st.session_state["pagecheck_history_notice"] = (
+                                f"Audit saved to local history ({saved_id[:8]})."
+                            )
+                        except ValueError as exc:
+                            st.session_state["pagecheck_history_notice"] = str(exc)
                 except ValueError as exc:
                     st.error(str(exc))
 
@@ -227,61 +280,81 @@ def render_app() -> None:
                 if uploaded is None:
                     raise ValueError("Choose a JSON report first.")
                 clear_active_audit(st.session_state, st.query_params)
+                if use_postgres:
+                    st.session_state.pop("pagecheck_recovery_token", None)
+                    st.session_state["pagecheck_browser_clear"] = True
                 st.session_state["pagecheck_report"] = parse_uploaded_report(uploaded.getvalue())
                 st.session_state["pagecheck_origin"] = "Imported report"
                 st.session_state.pop("pagecheck_history_notice", None)
+                if use_postgres:
+                    st.rerun()  # Persist browser-token clearing before a possible F5.
             except ValueError as exc:
                 st.error(str(exc))
 
-    with st.expander("Saved audits · local history"):
-        st.caption("Saved on this computer. Opening a report does not run the audit again.")
-        try:
-            history = _history_items(api_url)
-        except (httpx.HTTPError, ValueError, KeyError):
-            history = []
-            st.caption("History is unavailable. Check that the local FastAPI server is running.")
-        if not history:
-            st.caption("No saved audits yet.")
-        else:
-            choices = {item["id"]: item for item in history}
-            # The browser timezone is the user's location, not the server's.
-            # ISO/UTC is retained inside SQLite for accurate sorting and storage.
-            client_timezone = getattr(st.context, "timezone", None)
-            client_offset = getattr(st.context, "timezone_offset", None)
-            choice = st.selectbox(
-                "Choose a saved audit", options=list(choices),
-                format_func=lambda audit_id: history_option_label(
-                    choices[audit_id], browser_timezone=client_timezone,
-                    browser_offset_minutes=client_offset,
-                ),
-                key="pagecheck_selected_history",
-                index=(list(choices).index(st.query_params.get("audit"))
-                       if st.query_params.get("audit") in choices else 0),
-            )
-            if st.button("Open saved audit"):
-                try:
-                    report = _load_history(api_url, choice)
-                    st.session_state["pagecheck_report"] = report
-                    remember_active_audit(st.session_state, st.query_params, choice)
-                    st.session_state["pagecheck_origin"] = "Saved audit · local history"
-                    st.session_state.pop("pagecheck_history_notice", None)
-                    st.rerun()
-                except (httpx.HTTPError, ValueError, KeyError) as exc:
-                    st.error(f"Could not open saved audit: {exc}")
-            with st.expander("Delete saved audit"):
-                st.caption("This permanently deletes the selected saved report and its copied screenshots.")
-                confirm = st.checkbox("I understand this cannot be undone", key=f"pagecheck_history_delete_{choice}")
-                if st.button("Delete selected audit", disabled=not confirm):
+    if not use_postgres:
+        with st.expander("Saved audits · local history"):
+            st.caption("Saved on this computer. Opening a report does not run the audit again.")
+            try:
+                history = _history_items(api_url)
+            except (httpx.HTTPError, ValueError, KeyError):
+                history = []
+                st.caption("History is unavailable. Check that the local FastAPI server is running.")
+            if not history:
+                st.caption("No saved audits yet.")
+            else:
+                choices = {item["id"]: item for item in history}
+                # The browser timezone is the user's location, not the server's.
+                # ISO/UTC is retained inside SQLite for accurate sorting and storage.
+                client_timezone = getattr(st.context, "timezone", None)
+                client_offset = getattr(st.context, "timezone_offset", None)
+                choice = st.selectbox(
+                    "Choose a saved audit", options=list(choices),
+                    format_func=lambda audit_id: history_option_label(
+                        choices[audit_id], browser_timezone=client_timezone,
+                        browser_offset_minutes=client_offset,
+                    ),
+                    key="pagecheck_selected_history",
+                    index=(list(choices).index(st.query_params.get("audit"))
+                           if st.query_params.get("audit") in choices else 0),
+                )
+                if st.button("Open saved audit"):
                     try:
-                        _delete_history(api_url, choice)
-                        if st.session_state.get("pagecheck_active_history_id") == choice:
-                            clear_active_audit(st.session_state, st.query_params)
-                            st.session_state.pop("pagecheck_report", None)
-                            st.session_state.pop("pagecheck_origin", None)
+                        report = _load_history(api_url, choice)
+                        st.session_state["pagecheck_report"] = report
+                        remember_active_audit(st.session_state, st.query_params, choice)
+                        st.session_state["pagecheck_origin"] = "Saved audit · local history"
                         st.session_state.pop("pagecheck_history_notice", None)
                         st.rerun()
-                    except httpx.HTTPError as exc:
-                        st.error(f"Could not delete saved audit: {exc}")
+                    except (httpx.HTTPError, ValueError, KeyError) as exc:
+                        st.error(f"Could not open saved audit: {exc}")
+                with st.expander("Delete saved audit"):
+                    st.caption("This permanently deletes the selected saved report and its copied screenshots.")
+                    confirm = st.checkbox("I understand this cannot be undone", key=f"pagecheck_history_delete_{choice}")
+                    if st.button("Delete selected audit", disabled=not confirm):
+                        try:
+                            _delete_history(api_url, choice)
+                            if st.session_state.get("pagecheck_active_history_id") == choice:
+                                clear_active_audit(st.session_state, st.query_params)
+                                st.session_state.pop("pagecheck_report", None)
+                                st.session_state.pop("pagecheck_origin", None)
+                            st.session_state.pop("pagecheck_history_notice", None)
+                            st.rerun()
+                        except httpx.HTTPError as exc:
+                            st.error(f"Could not delete saved audit: {exc}")
+
+    elif st.session_state.get("pagecheck_recovery_token"):
+        st.caption("Only this browser's latest audit can be restored for up to 24 hours.")
+        if st.button("Forget this audit on this browser", type="tertiary"):
+            token = st.session_state.pop("pagecheck_recovery_token")
+            try:
+                revoke_temporary(api_url, token)
+            except TemporaryRecoveryUnavailable:
+                pass
+            st.session_state["pagecheck_browser_clear"] = True
+            st.session_state.pop("pagecheck_report", None)
+            st.session_state.pop("pagecheck_origin", None)
+            st.session_state.pop("pagecheck_history_notice", None)
+            st.rerun()
 
     if st.session_state.get("pagecheck_history_notice"):
         st.caption(st.session_state["pagecheck_history_notice"])

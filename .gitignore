@@ -36,3 +36,7 @@ data/local/
 # Node engines
 node_modules/
 coverage/
+.env
+.env.local
+.env.*
+!.env.example
