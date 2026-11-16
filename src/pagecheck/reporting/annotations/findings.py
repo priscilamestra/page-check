@@ -47,3 +47,46 @@ def build_image_findings(probe: dict[str, Any]) -> list[dict[str, Any]]:
             }
         )
     return sorted(result, key=lambda item: (item["box"]["y"], item["box"]["x"], item["id"]))
+
+
+def build_capture_image_warnings(probe: dict[str, Any]) -> list[dict[str, Any]]:
+    """Show visible missing images as capture warnings, not verified site defects.
+
+    An aborted resource, JS-only image, or incomplete render is NOT evidence of
+    a broken origin asset. Require a visible box plus finished empty image.
+    """
+    result: list[dict[str, Any]] = []
+    for image in probe.get("images", []):
+        if (not isinstance(image, dict) or image.get("status") != "not_verified"
+                or not image.get("rendered") or image.get("complete") is not True
+                or int(image.get("natural_width") or 0) > 0):
+            continue
+        box = image.get("box")
+        if not isinstance(box, dict):
+            continue
+        try:
+            import math
+            coords = {key: float(box[key]) for key in ("x", "y", "width", "height")}
+            index = int(image["index"])
+            if not all(math.isfinite(v) for v in coords.values()):
+                continue
+            if coords["width"] <= 0 or coords["height"] <= 0 or index < 0:
+                continue
+        except (TypeError, ValueError, KeyError, OverflowError):
+            continue
+        result.append({
+            "id": f"capture-image-missing-{index}", "category": "images",
+            "severity": "low", "status": "warning",
+            "title": "Image not displayed in the audit capture",
+            "description": "The visible image has no decoded pixels in the restricted capture. "
+                           "This does not prove a defect on the live website.",
+            "action": "Open the image URL in a normal browser and check JS/lazy loading "
+                      "before treating this as a site issue.",
+            "owner": "Frontend / Content", "element_index": index,
+            "evidence": {"src": str(image.get("src") or ""),
+                         "alt": str(image.get("alt") or ""),
+                         "data_src": str(image.get("data_src") or ""),
+                         "capture_only": True},
+            "box": coords,
+        })
+    return result

@@ -18,7 +18,9 @@ from pagecheck.acquisition.browser.public_navigation import (
 )
 from pagecheck.application.use_cases.audit_visual_viewport import audit_visual_viewport
 from pagecheck.acquisition.browser.visual_probe import inspect_visible_images
-from pagecheck.reporting.annotations.findings import build_image_findings
+from pagecheck.acquisition.browser.visual_hierarchy import inspect_heading_hierarchy
+from pagecheck.reporting.annotations.findings import (build_image_findings,
+    build_capture_image_warnings)
 from pagecheck.reporting.annotations.overlay import annotate_screenshot, write_annotation_manifest
 from pagecheck.common.security.url_validation import validate_public_url
 
@@ -30,6 +32,7 @@ MAX_DOCUMENT_HEIGHT = 8000
 def capture_with_browser(
     browser: Browser, *, url: str, output_dir: Path,
     fetch_resource: Callable[..., Any] = fetch_public_resource,
+    include_rendering_hints: bool = False,
 ) -> dict[str, Any]:
     """Capture two independent viewports without clicks, POST, or JavaScript.
 
@@ -90,7 +93,16 @@ def capture_with_browser(
                     if img.get("src") in blocked:
                         img["status"] = "not_verified"
                 findings = build_image_findings({"images": images})
-                for finding in findings:
+                if include_rendering_hints:
+                    findings += build_capture_image_warnings({"images": images})
+                try:
+                    hierarchy = inspect_heading_hierarchy(page)
+                except (TypeError, ValueError, AttributeError):
+                    hierarchy = {"status": "not_verified", "headings_checked": 0, "findings": []}
+                findings += hierarchy["findings"]
+                for finding in findings[:]:
+                    if finding.get("category") != "images" or finding.get("status") != "failed":
+                        continue
                     finding["title"] = "Imagem não carregou na área visível"
                     finding["description"] = (
                         "A imagem visível não foi decodificada neste navegador "
@@ -113,6 +125,9 @@ def capture_with_browser(
                     "viewport": viewport,
                     "screenshots": screenshot_paths,
                     "findings": findings,
+                    "design_review": {"status": hierarchy["status"],
+                                      "headings_checked": hierarchy["headings_checked"],
+                                      "scope": "first viewport"},
                     "scroll_complete": False,
                     "geometry": {"document_height": document_height, "truncated": True},
                     "images": {
@@ -140,6 +155,7 @@ def capture_with_browser(
             observation = audit_visual_viewport(
                 page, output_dir=output_dir / viewport,
                 blocked_urls=lambda: {row["url"] for row in network.blocked},
+                include_rendering_hints=include_rendering_hints,
             )
             observation["limitations"] = [
                 "JavaScript is disabled: interactive widgets, client-side navigation "
@@ -188,12 +204,14 @@ def collect_public_visuals(
     if browser_launcher is not None:
         browser = browser_launcher()
         try:
-            return capture_with_browser(browser, url=url, output_dir=directory)
+            return capture_with_browser(browser, url=url, output_dir=directory,
+                                        include_rendering_hints=True)
         finally:
             browser.close()
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
         try:
-            return capture_with_browser(browser, url=url, output_dir=directory)
+            return capture_with_browser(browser, url=url, output_dir=directory,
+                                        include_rendering_hints=True)
         finally:
             browser.close()

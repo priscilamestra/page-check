@@ -64,7 +64,9 @@ def annotate_screenshot(
         if x2 <= x1 or y2 <= y1:
             continue
         number = len(marks) + 1
-        draw.rectangle((x1, y1, x2, y2), outline=(199, 48, 54), width=3)
+        # Amber = needs review in this capture; red = confirmed failure.
+        mark_color = (198, 122, 33) if item.get("status") == "warning" else (199, 48, 54)
+        draw.rectangle((x1, y1, x2, y2), outline=mark_color, width=3)
         label = str(number)
         text_box = draw.textbbox((0, 0), label, font=font)
         text_w, text_h = text_box[2] - text_box[0], text_box[3] - text_box[1]
@@ -72,7 +74,7 @@ def annotate_screenshot(
         left = min(max(0, x1), max(0, width - badge_w))
         top = max(0, y1 - badge_h - 2)
         draw.rounded_rectangle((left, top, left + badge_w - 1, top + badge_h - 1),
-                               radius=5, fill=(199, 48, 54))
+                               radius=5, fill=mark_color)
         draw.text((left + (badge_w - text_w) // 2, top + (badge_h - text_h) // 2 - text_box[1]),
                   label, font=font, fill=(255, 255, 255))
         marks.append({"number": number, "finding_id": item["id"],

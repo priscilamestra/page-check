@@ -93,6 +93,8 @@ def inspect_visible_images(page: Page) -> list[dict[str, Any]]:
         visible.append({
             "index": index, "src": image.get("src"),
             "data_src": image.get("data_src"), "alt": image.get("alt"),
+            "complete": bool(image.get("complete")),
+            "natural_width": int(image.get("natural_width") or 0),
             "status": status, "rendered": True,
             "box": {"x": left, "y": top, "width": right - left,
                     "height": bottom - top},
@@ -153,6 +155,8 @@ def inspect_rendered_page(
                 "loaded_before_scroll": bool(initial and initial["complete"] and initial["natural_width"] > 0),
                 "loaded_after_scroll": status == "loaded",
                 "status": status,
+                "complete": bool(img["complete"]),
+                "natural_width": int(img["natural_width"]),
                 "rendered": img["rendered"],
                 "box": img["box"],
             }

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from collections.abc import Mapping
 from typing import Any
 
 import streamlit as st
@@ -11,6 +12,27 @@ from pagecheck.ui.components.visual_explorer import visual_cards, visual_observa
 
 def render_screenshots(report: dict[str, Any], *, root: Path) -> None:
     st.markdown("#### Page screenshots")
+    design_reviews = report.get("design_reviews") or {}
+    if isinstance(design_reviews, Mapping) and design_reviews:
+        st.markdown("**Visual hierarchy · measured checks**")
+        summary = st.columns(2, gap="medium")
+        labels = {
+            "needs_review": "Needs review",
+            "no_measured_findings": "No issues in measured heading checks",
+            "limited": "Limited evidence",
+            "not_verified": "Not assessed",
+        }
+        for column, viewport in zip(summary, ("desktop", "mobile")):
+            review = design_reviews.get(viewport) or {}
+            if not isinstance(review, Mapping):
+                review = {}
+            label = labels.get(str(review.get("status")), "Not assessed")
+            count = review.get("headings_checked", 0)
+            scope = str(review.get("scope") or "visible area")
+            with column:
+                st.markdown(f"**{viewport.title()}** · {label}")
+                if isinstance(count, int) and count > 0:
+                    st.caption(f"{count} visible headings · {scope}")
     cards = visual_cards(report, root)
     columns = st.columns(2, gap="medium")
     for column, card in zip(columns, cards):
@@ -55,5 +77,3 @@ def render_screenshots(report: dict[str, Any], *, root: Path) -> None:
                 elif card["is_partial"]:
                     st.caption("Partial screenshot — not a full-page visual audit.")
 
-    st.caption("Only confirmed annotations included in the report are displayed. "
-               "An unmarked screenshot does not mean the page has no issues.")

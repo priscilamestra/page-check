@@ -12,16 +12,19 @@ from PIL import Image
 from playwright.sync_api import Page
 
 from pagecheck.acquisition.browser.visual_probe import inspect_rendered_page
+from pagecheck.acquisition.browser.visual_hierarchy import inspect_heading_hierarchy
 from pagecheck.acquisition.browser.layout_probe import collect_layout_observations
 from pagecheck.audits.images.visual_rules import build_image_quality_findings
 from pagecheck.audits.layout.rules import build_layout_findings
-from pagecheck.reporting.annotations.findings import build_image_findings
+from pagecheck.reporting.annotations.findings import (build_image_findings,
+    build_capture_image_warnings)
 from pagecheck.reporting.annotations.overlay import annotate_screenshot, write_annotation_manifest
 
 
 def audit_visual_viewport(
     page: Page, *, output_dir: Path | str,
     blocked_urls: Callable[[], set[str]] | None = None,
+    include_rendering_hints: bool = False,
 ) -> dict[str, Any]:
     """Produz screenshot, evidências geométricas e marcadores por viewport.
 
@@ -43,9 +46,22 @@ def audit_visual_viewport(
         i["status"] == "not_verified" for i in visual["images"]
     )
     layout = collect_layout_observations(page)
+    # The scanner has scrolled to the bottom. Inspect the first visible screen
+    # so heading boxes match document coordinates in the full-page screenshot.
+    try:
+        page.evaluate("() => window.scrollTo(0, 0)")
+    except (TypeError, ValueError, AttributeError):
+        pass
+    try:
+        hierarchy = inspect_heading_hierarchy(page)
+    except (TypeError, ValueError, AttributeError):
+        hierarchy = {"status": "not_verified", "headings_checked": 0, "findings": []}
+    layout_findings = build_layout_findings(layout)
     findings = (build_image_findings(visual) +
+                (build_capture_image_warnings(visual) if include_rendering_hints else []) +
                 build_image_quality_findings(layout) +
-                build_layout_findings(layout))
+                layout_findings + hierarchy["findings"])
+    design_status = "needs_review" if layout_findings or hierarchy["findings"] else hierarchy["status"]
     findings.sort(key=lambda x: (float((x.get("box") or {}).get("y", 1e10)), x["id"]))
 
     screenshot = visual["screenshots"]["after_scroll"]
@@ -83,6 +99,10 @@ def audit_visual_viewport(
                    "broken": visual["broken_image_count"],
                    "not_verified": visual["not_verified_image_count"]},
         "findings": findings,
+        "design_review": {"status": design_status,
+                          "headings_checked": hierarchy["headings_checked"],
+                          "layout_findings": len(layout_findings),
+                          "scope": "visible headings + page geometry"},
         "screenshots": {**visual["screenshots"], "annotated": str(target)},
         "manifest": str(manifest_path),
         "annotated_count": annotation["annotated_count"],

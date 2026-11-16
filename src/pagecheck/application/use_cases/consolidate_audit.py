@@ -89,6 +89,7 @@ def consolidate_audit(
         source_states["conversion"] = "completed"
 
     screenshot_refs: dict[str, Any] = {}
+    design_reviews: dict[str, Any] = {}
     visual_limitations: dict[str, list[str]] = {}
     for viewport in VIEWPORT_NAMES:
         observation = _report(visuals.get(viewport), f"visuals.{viewport}")
@@ -113,6 +114,8 @@ def consolidate_audit(
         source_states["visuals"][viewport] = "partial" if warnings else "completed"
         if isinstance(observation.get("screenshots"), Mapping):
             screenshot_refs[viewport] = dict(observation["screenshots"])
+        if isinstance(observation.get("design_review"), Mapping):
+            design_reviews[viewport] = dict(observation["design_review"])
 
     engine_data = external.get("engines", external) if external is not None else {}
     if not isinstance(engine_data, Mapping):
@@ -190,6 +193,7 @@ def consolidate_audit(
         "checks": checks,
         "actions_by_team": group_actions(priority),
         "screenshots": screenshot_refs,
+        "design_reviews": design_reviews,
         "engine_limitations": engine_limitations,
         "visual_limitations": visual_limitations,
         "limitations": [
