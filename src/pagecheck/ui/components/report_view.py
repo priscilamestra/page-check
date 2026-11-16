@@ -8,8 +8,7 @@ import streamlit as st
 
 from pagecheck.reporting.english_copy import check_copy
 from pagecheck.reporting.exports import findings_csv, zip_export
-from pagecheck.ui.components.report_data import export_report_json, issue_counts
-from pagecheck.ui.components.overview_insights import source_counts
+from pagecheck.ui.components.report_data import export_report_json
 from pagecheck.ui.components.overview_view import render_overview
 from pagecheck.ui.components.issues_view import render_issues
 from pagecheck.ui.components.screenshots_view import render_screenshots
@@ -18,12 +17,6 @@ from pagecheck.ui.components.table_sizing import compact_table_height
 from pagecheck.ui.components.url_explorer import (
     campaign_parameters, check_rows, area_summary, filter_rows,
 )
-
-def _score(value: object) -> str:
-    if isinstance(value, (int, float)) and not isinstance(value, bool):
-        return f"{value:.0f}/100"
-    return "Not verified"
-
 
 def render_report(report: dict[str, Any], *, root: Path) -> None:
     st.subheader("Audit results")
@@ -35,36 +28,14 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
     if language:
         st.caption(f"Content language: {labels.get(language, language)}"
                    + (" · Target keywords: " + ", ".join(map(str, keywords)) if keywords else ""))
-    counts = issue_counts(report)
-    sources = source_counts(report)
-    seo = ((report.get("scores") or {}).get("internal") or {}).get("seo") or {}
-    cols = st.columns(4)
-    cols[0].metric("Technical SEO · scored rules", _score(seo.get("score")))
-    cols[1].metric("Issues found", counts["failed"])
-    cols[2].metric("Needs review", counts["warning"])
-    cols[3].metric("Sources completed", f"{sources['completed']}/{sum(sources.values())}")
-    st.caption(
-        "SEO score applies only to eligible technical SEO rules. It does not include "
-        "keyword guidance, accessibility, Lighthouse, or visual checks. "
-        f"{counts['not_verified']} checks are Not verified — these are not confirmed defects."
-    )
-    score_coverage = seo.get("coverage")
-    if (isinstance(score_coverage, (int, float)) and not isinstance(score_coverage, bool)
-            and 0 <= score_coverage <= 1):
-        st.caption(f"SEO scoring-rule coverage: {score_coverage:.0%} of eligible SEO scoring rules. "
-                   "This is not coverage of the whole website.")
-    if seo.get("partial_score") is True:
-        st.warning("SEO scoring was partial. Review the coverage before interpreting this score.")
-    if report["status"] == "partial":
-        st.caption(f"Coverage: {sources['completed']} completed · {sources['partial']} limited · "
-                   f"{sources['not_verified']} source(s) not verified. "
-                   "See Overview for what was and was not inspected.")
 
+    # The report archive is shared by Overview and Data rather than assembled twice.
+    report_zip = zip_export(report, root)
     tab_summary, tab_journey, tab_issues, tab_visual, tab_teams, tab_data = st.tabs(
         ["Overview", "URLs & parameters", "Issues", "Screenshots", "Teams", "Data"]
     )
     with tab_summary:
-        render_overview(report, root=root)
+        render_overview(report, root=root, zip_data=report_zip)
 
     with tab_journey:
         st.markdown("#### URL & campaign parameters")
@@ -154,7 +125,7 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
             )
         with col2:
             st.download_button(
-                "Download HTML report + screenshots (ZIP)", zip_export(report, root),
+                "Download HTML report + screenshots (ZIP)", report_zip,
                 file_name="pagecheck_report.zip", mime="application/zip",
             )
         st.caption("Reports can contain URLs and data supplied during the audit. "

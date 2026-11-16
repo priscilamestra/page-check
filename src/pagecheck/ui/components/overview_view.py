@@ -1,187 +1,108 @@
-"""Stage 19A executive Overview. Presentation-only, no audit mutations or IO.
+"""Compact Sitebulb-inspired audit Overview (presentation only).
 
-Visual reports remain truthful about limited screenshots, missing engines,
-and the difference between a scored SEO subset and unverified checks.
+Shows a truthful audit snapshot, priorities and compact charts. Long explanations,
+per-source limitations and check counts remain available on demand, without
+changing report data, scoring, the audit engine or the other result tabs.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 import streamlit as st
 
-from pagecheck.reporting.english_copy import check_copy, team_name
-from pagecheck.ui.components.coverage_details import screenshot_kind, source_rows
-from pagecheck.ui.components.overview_insights import (
-    actionable_rows, count_label, missing_evidence_rows, prioritized_findings, source_counts,
-)
+from pagecheck.reporting.english_copy import check_copy
+from pagecheck.reporting.exports import zip_export
 from pagecheck.ui.components.coverage_composition import source_composition_html
-from pagecheck.ui.components.report_data import SEVERITY_LABELS, screenshot_entries
-
-_SEVERITY_COLOR = {"critical": "red", "high": "red", "medium": "orange",
-                   "low": "yellow", "info": "gray"}
-
-
-def _why_it_matters(item: dict[str, Any]) -> str:
-    """Cautious general impact, not claims of measured conversion/ranking losses."""
-    area = str(item.get("module") or "").lower()
-    if area in {"accessibility", "axe"}:
-        return "May make a page control harder to use with assistive technology."
-    if area == "seo":
-        return "May affect how clearly the page communicates its topic to visitors and search engines."
-    if area in {"navigation", "links"}:
-        return "Visitors may have trouble reaching the intended destination; confirm the live behavior."
-    if area == "forms":
-        return "May make a form harder to understand or submit; submissions were not tested."
-    if area == "tracking":
-        return "May affect attribution visibility; this audit does not verify analytics delivery."
-    if area in {"images", "visual", "layout"}:
-        return "May affect the page experience on the inspected viewport."
-    return "Review this observation before making changes; the audit reports only available evidence."
+from pagecheck.ui.components.coverage_details import source_rows
+from pagecheck.ui.components.overview_dashboard import (
+    OVERVIEW_STYLES, area_chart_html, findings_html, metric_cards_html,
+)
+from pagecheck.ui.components.overview_insights import (
+    actionable_rows, missing_evidence_rows, prioritized_findings, source_counts,
+)
+from pagecheck.ui.components.report_data import issue_counts
 
 
-def _action_card(item: dict[str, Any], index: int) -> None:
-    title, recommendation = check_copy(item)
-    priority = str(item.get("severity") or "info").lower()
-    status = item.get("status")
-    with st.container(border=True):
-        col_number, col_label = st.columns([1, 9], vertical_alignment="center")
-        col_number.markdown(f"**{index}.**")
-        with col_label:
-            st.badge(
-                f"{SEVERITY_LABELS.get(priority, 'Review')} · "
-                f"{'Issue' if status == 'failed' else 'Needs review'}",
-                color=_SEVERITY_COLOR.get(priority, "gray"),
-            )
-        st.markdown(f"**{title}**")
-        st.caption(f"{str(item.get('module') or 'Other').replace('_', ' ').title()}"
-                   f" · {team_name(item.get('team'))}")
-        st.write("**Why it matters**")
-        st.caption(_why_it_matters(item))
-        st.write("**What to do**")
-        st.write(recommendation or "Review the technical evidence and confirm the page behavior.")
-        st.caption("Static evidence only · Open the Issues tab for source and technical details.")
+def _mapping(value: object) -> Mapping[str, Any]:
+    return value if isinstance(value, Mapping) else {}
 
 
-def _visual_preview(report: dict[str, Any], root: Path) -> None:
-    st.markdown("#### Visual evidence")
-    st.caption("Only screenshots captured by the guarded browser are displayed. "
-               "An initial viewport is partial evidence, not a full-page visual audit.")
-    files = dict(screenshot_entries(report, root))
-    sources = {item["id"]: item for item in source_rows(report)}
-    columns = st.columns(2)
-    for index, viewport in enumerate(("desktop", "mobile")):
-        source = sources[viewport]
-        with columns[index]:
-            with st.container(border=True):
-                st.markdown(f"**{viewport.capitalize()}**")
-                st.badge(source["status_label"], color=(
-                    "green" if source["status"] == "completed" else
-                    "orange" if source["status"] == "partial" else "gray"))
-                path = files.get(viewport)
-                if path:
-                    kind = screenshot_kind(report, viewport)
-                    if kind.startswith("Initial"):
-                        st.caption("Partial visual evidence · first viewport only")
-                    else:
-                        st.caption(kind)
-                    # Limit full-page screenshots in the executive summary;
-                    # the Screenshots tab preserves the full evidence display.
-                    with st.container(height=260, border=False):
-                        st.image(str(path), use_container_width=True)
-                else:
-                    st.caption("No screenshot available. Not a visual pass.")
-                if source["reason"]:
-                    with st.expander("Capture scope / reason"):
-                        st.caption(source["reason"])
-    st.caption("Open Screenshots for the full saved images and their limitations.")
+def render_overview(report: dict[str, Any], *, root: Path, zip_data: bytes | None = None) -> None:
+    """Single-page summary; heavy evidence stays in Issues/Screenshots/Data."""
+    st.markdown(OVERVIEW_STYLES, unsafe_allow_html=True)
+    heading, download = st.columns([5, 2], vertical_alignment="center")
+    with heading:
+        st.markdown("#### Audit overview")
+    with download:
+        st.download_button(
+            "Download report (ZIP)", zip_data if zip_data is not None else zip_export(report, root),
+            file_name="pagecheck_report.zip", mime="application/zip",
+            use_container_width=True,
+        )
+    # Visual evidence remains in the dedicated Screenshots tab.
 
+    summary = issue_counts(report)
+    coverage = source_counts(report)
+    seo = _mapping(_mapping(_mapping(report.get("scores")).get("internal")).get("seo"))
+    st.markdown(metric_cards_html(
+        seo_score=seo.get("score"),
+        seo_partial=seo.get("partial_score") is True,
+        issues=summary["failed"], reviews=summary["warning"],
+        completed=coverage["completed"], partial=coverage["partial"],
+        not_verified=coverage["not_verified"],
+    ), unsafe_allow_html=True)
 
-def _source_cards(report: dict[str, Any]) -> None:
-    st.markdown("#### What was actually inspected?")
-    counts = source_counts(report)
-    columns = st.columns(3)
-    columns[0].metric("Completed sources", counts["completed"])
-    columns[1].metric("Limited sources", counts["partial"])
-    columns[2].metric("Not verified sources", counts["not_verified"])
-    st.caption("A source that could not complete is not a successful check. "
-               "The number of sources is different from the number of individual checks.")
-    st.caption("One bar represents all audited sources. Segments show the share of "
-               "sources that completed, ran with limits, or could not be verified.")
-    st.markdown(source_composition_html(counts), unsafe_allow_html=True)
-    # Keep the source cards available for inspection without stretching the
-    # executive Overview by seven rows of technical explanations.
-    with st.expander("View the seven audit sources and limitations"):
-        cols = st.columns(2)
-        for index, row in enumerate(source_rows(report)):
-            with cols[index % 2]:
-                with st.container(border=True):
-                    st.markdown(f"**{row['title']}**")
-                    st.badge(row["status_label"], color=(
-                        "green" if row["status"] == "completed" else
-                        "orange" if row["status"] == "partial" else "gray"))
-                    st.caption(row["description"])
-                    if row["reason"]:
-                        st.caption("Scope / reason: " + row["reason"])
-
-
-def render_overview(report: dict[str, Any], *, root: Path) -> None:
-    """Summary → priorities → visuals → charts → coverage → technical details."""
     st.markdown("#### Fix these first")
-    actionable = prioritized_findings(report, limit=3)
-    if not actionable:
-        st.info("No actionable findings were reported by the checks that ran. "
-                "This does not guarantee the page has no problems.")
+    priorities = prioritized_findings(report, limit=4)
+    if priorities:
+        prepared = []
+        for item in priorities:
+            title, recommendation = check_copy(item)
+            prepared.append({
+                "title": title, "recommendation": recommendation,
+                "status": item.get("status"), "severity": item.get("severity"),
+                "area": item.get("module"),
+            })
+        st.markdown(findings_html(prepared), unsafe_allow_html=True)
+        st.caption("Open **Issues** to inspect all findings, evidence and full recommendations.")
     else:
-        cols = st.columns(3)
-        for index, item in enumerate(actionable, 1):
-            with cols[(index - 1) % 3]:
-                _action_card(item, index)
-        total = len([item for item in report.get("findings") or []
-                     if isinstance(item, dict) and item.get("status") in {"failed", "warning"}])
-        if total > len(actionable):
-            st.caption(f"Showing {len(actionable)} of {total} findings. "
-                       "Open the Issues tab to review all findings in priority order.")
+        st.caption("No issues or review items were reported by the checks that ran. "
+                   "Unchecked areas are not assumed to pass.")
+
+    left, right = st.columns([1.35, 1], gap="medium")
+    with left:
+        st.markdown("#### Findings by area")
+        by_area = actionable_rows(report)
+        if by_area:
+            st.markdown(area_chart_html(by_area), unsafe_allow_html=True)
+            if len(by_area) > 6:
+                st.caption(f"Showing the 6 busiest of {len(by_area)} areas; see **Issues** for all findings.")
         else:
-            st.caption("Open the Issues tab for the full technical evidence.")
+            st.caption("No actionable findings in the checks that ran.")
+    with right:
+        st.markdown("#### Audit coverage")
+        st.markdown(source_composition_html(coverage), unsafe_allow_html=True)
+        st.caption("Completed, limited and unavailable sources are kept separate. "
+                   "This is not a score for the entire website.")
 
-    _visual_preview(report, root)
-
-    st.markdown("#### Findings by area")
-    st.caption("Small counts are easier to read directly than as full-length bars. "
-               "These are issues and review items, not overall area scores.")
-    by_area = actionable_rows(report)
-    if by_area:
-        st.dataframe([
-            {"Area": str(row["area"]).replace("_", " ").title(),
-             "Issues": row["issues"], "Needs review": row["reviews"],
-             "Total findings": row["total"]}
-            for row in by_area
-        ], hide_index=True, use_container_width=True, height=min(260, 55 + len(by_area) * 36))
-    else:
-        st.info("No issues or review items were reported in the inspected checks.")
-
-    _source_cards(report)
-
-    st.markdown("#### Checks without enough evidence")
-    missing = missing_evidence_rows(report)
-    if missing:
-        total_missing = sum(item["total"] for item in missing)
-        st.caption(f"{count_label(total_missing, 'unverified check')} across "
-                   f"{count_label(len(missing), 'area')}. These are not confirmed "
-                   "defects; repeated page elements may generate multiple checks.")
-        with st.expander("Explore unverified checks by area"):
-            st.dataframe([
-                {"Area": str(item["area"]).replace("_", " ").title(),
-                 "Not verified": item["total"],
-                 "Share of unverified checks": f"{item['total']/total_missing:.1%}"}
-                for item in missing
-            ], hide_index=True, use_container_width=True,
-               height=min(240, 55 + len(missing) * 36))
-    else:
-        st.caption("No individually unverified checks were recorded by area.")
-
-    with st.expander("Technical coverage details"):
-        st.json(report.get("source_states") or {}, expanded=False)
-        st.caption("Only executed checks are covered. Scores do not predict "
-                   "search rankings or conversions. Full raw data is in the Data tab.")
+    with st.expander("What was checked? · coverage details"):
+        st.dataframe(
+            [{"Source": row["title"], "Result": row["status_label"],
+              "Limitation": row["reason"] or "—"}
+             for row in source_rows(report)],
+            hide_index=True, use_container_width=True, height=292,
+        )
+        missing = missing_evidence_rows(report)
+        if missing:
+            total = sum(row["total"] for row in missing)
+            st.caption(f"{total} individual checks were not verified. "
+                       "These are missing evidence, not confirmed defects.")
+        score_coverage = seo.get("coverage")
+        if (isinstance(score_coverage, (int, float))
+                and not isinstance(score_coverage, bool) and 0 <= score_coverage <= 1):
+            st.caption(f"Technical SEO score covers {score_coverage:.0%} of eligible SEO "
+                       "scoring rules—not the entire website, accessibility or visual quality.")
+        if seo.get("partial_score") is True:
+            st.caption("The technical SEO score is partial because not all eligible rules were verified.")
