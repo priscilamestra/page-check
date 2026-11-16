@@ -5,6 +5,7 @@ import re
 from urllib.parse import unquote, urljoin, urlsplit
 
 from bs4 import BeautifulSoup
+from bs4.element import Tag
 
 CTA_TERMS = re.compile(
     r"\b(?:contato|contact|fale conosco|saiba mais|learn more|"
@@ -24,6 +25,22 @@ def _finding(rule: str, status: str, title: str, *, evidence: dict,
     }
 
 
+def _element_selector(element: Tag) -> str:
+    """Record a reproducible DOM location, not a guessed visual coordinate."""
+    segments = []
+    node: Tag | None = element
+    while isinstance(node, Tag) and node.name != "[document]" and len(segments) < 24:
+        parent = node.parent
+        if not isinstance(parent, Tag):
+            segments.append(node.name)
+            break
+        siblings = parent.find_all(node.name, recursive=False)
+        index = next((i for i, sibling in enumerate(siblings, 1) if sibling is node), 1)
+        segments.append(f"{node.name}:nth-of-type({index})")
+        node = parent
+    return " > ".join(reversed(segments))
+
+
 def _fragment_exists(soup: BeautifulSoup, fragment: str) -> bool:
     target = unquote(fragment)
     return bool(soup.find(id=target) or soup.find("a", attrs={"name": target}))
@@ -37,7 +54,8 @@ def inspect_navigation(html: str, page_url: str) -> list[dict]:
         href = str(a.get("href") or "").strip()
         text = a.get_text(" ", strip=True) or str(a.get("aria-label") or "").strip()
         element = {"tag": "a", "index": index, "id": a.get("id"), "text": text,
-                   "href": href, "selector_hint": f"#{a['id']}" if a.get("id") else None}
+                   "href": href, "selector_hint": f"#{a['id']}" if a.get("id") else None,
+                   "selector": _element_selector(a)}
         is_cta = bool(CTA_TERMS.search(text) or a.get("data-cta"))
         prefix = "CTA" if is_cta else "LINK"
         if not href or href == "#":
@@ -86,6 +104,7 @@ def inspect_navigation(html: str, page_url: str) -> list[dict]:
         results.append(_finding(f"NAV_BUTTON_CTA_{index}", "not_verified",
             "CTA identificado; ação não executada", evidence={"tag": "button",
                 "id": button.get("id"), "text": text, "type": button_type,
+                "selector": _element_selector(button),
                 "inside_form": in_form},
             recommendation="Validar a ação em teste autorizado. O Page Check não envia formulários."))
     return results

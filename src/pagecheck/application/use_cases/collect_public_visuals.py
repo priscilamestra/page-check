@@ -17,6 +17,9 @@ from pagecheck.acquisition.browser.public_navigation import (
     fetch_public_resource, install_guarded_routes,
 )
 from pagecheck.application.use_cases.audit_visual_viewport import audit_visual_viewport
+from pagecheck.acquisition.browser.visual_probe import inspect_visible_images
+from pagecheck.reporting.annotations.findings import build_image_findings
+from pagecheck.reporting.annotations.overlay import annotate_screenshot, write_annotation_manifest
 from pagecheck.common.security.url_validation import validate_public_url
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -63,26 +66,75 @@ def capture_with_browser(
                 errors[viewport] = "Document height could not be measured."
                 continue
             if document_height > MAX_DOCUMENT_HEIGHT:
-                # Full-page screenshots on very long commercial pages may
-                # exhaust resources. Preserve only the visible viewport: this
-                # is evidence of rendering, NOT a full visual/layout audit.
+                # Do not try a full-page screenshot on oversized pages. Inspect
+                # ONLY image elements intersecting the first viewport and mark
+                # failures only after excluding requests blocked by our policy.
                 folder = output_dir / viewport
                 folder.mkdir(parents=True, exist_ok=True)
                 screenshot = folder / "initial_viewport.png"
                 page.screenshot(path=str(screenshot), full_page=False,
                                 animations="disabled", timeout=10000)
+                # Image inspection is additional evidence, not a prerequisite
+                # for the safe initial-viewport screenshot. In particular,
+                # controlled pages or restricted documents may not support the
+                # DOM image probe at all; preserve the captured viewport and
+                # mark image diagnostics unavailable rather than failing it.
+                image_probe_error = None
+                try:
+                    images = inspect_visible_images(page)
+                except Exception as exc:
+                    images = []
+                    image_probe_error = type(exc).__name__
+                blocked = {row["url"] for row in getattr(network, "blocked", [])}
+                for img in images:
+                    if img.get("src") in blocked:
+                        img["status"] = "not_verified"
+                findings = build_image_findings({"images": images})
+                for finding in findings:
+                    finding["title"] = "Imagem não carregou na área visível"
+                    finding["description"] = (
+                        "A imagem visível não foi decodificada neste navegador "
+                        "com JavaScript desativado. Verifique a URL e o arquivo."
+                    )
+                screenshot_paths = {"initial": str(screenshot)}
+                if findings:
+                    annotated_path = folder / "initial_viewport_annotated.png"
+                    annotated = annotate_screenshot(
+                        screenshot_path=screenshot,
+                        output_path=annotated_path,
+                        findings=findings,
+                        viewport_width=width,
+                        page_height=height,
+                    )
+                    screenshot_paths["annotated"] = str(annotated_path)
+                    manifest = folder / "annotations.json"
+                    write_annotation_manifest({**annotated, "findings": findings}, manifest)
                 results[viewport] = {
                     "viewport": viewport,
-                    "screenshots": {"initial": str(screenshot)},
-                    "findings": [],
+                    "screenshots": screenshot_paths,
+                    "findings": findings,
                     "scroll_complete": False,
                     "geometry": {"document_height": document_height, "truncated": True},
-                    "images": {"total": 0, "broken": 0, "not_verified": 0},
+                    "images": {
+                        "total": len(images),
+                        "broken": sum(img["status"] == "broken" for img in images),
+                        "not_verified": sum(img["status"] == "not_verified" for img in images),
+                    },
                     "limitations": [
                         f"Page height exceeds the safe {MAX_DOCUMENT_HEIGHT}px full-page limit. "
-                        "Only the first viewport was captured, without annotations "
-                        "or layout/image diagnostics."
+                        + ("Image checks were unavailable; only the first viewport was captured without annotations. "
+                           if image_probe_error else
+                           "Only visible images in the first viewport were checked. ")
+                        + "The rest of the page and layout were not verified.",
+                        "JavaScript is disabled; JS-dependent content was not verified.",
+                        *([f"Initial-viewport image inspection was not verified ({image_probe_error})."]
+                          if image_probe_error else []),
                     ],
+                    "network": {
+                        "requested": getattr(network, "requested", 0),
+                        "delivered": getattr(network, "delivered", 0),
+                        "blocked_count": len(blocked),
+                    },
                 }
                 continue
             observation = audit_visual_viewport(

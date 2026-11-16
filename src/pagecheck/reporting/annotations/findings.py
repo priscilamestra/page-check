@@ -35,7 +35,14 @@ def build_image_findings(probe: dict[str, Any]) -> list[dict[str, Any]]:
                 "description": "O navegador finalizou a tentativa, mas a imagem não foi decodificada.",
                 "action": "Verificar o endereço, o arquivo e o carregamento da imagem.",
                 "owner": "Frontend",
+                "status": "failed",
                 "element_index": index,
+                "evidence": {
+                    "src": str(image.get("src") or ""),
+                    "alt": str(image.get("alt") or ""),
+                    "element_index": index,
+                    "tag": "img",
+                },
                 "box": {"x": x, "y": y, "width": w, "height": h},
             }
         )

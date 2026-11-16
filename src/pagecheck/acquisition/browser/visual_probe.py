@@ -55,6 +55,51 @@ _IMAGE_SCRIPT = """() => Array.from(document.images).map((img, index) => {
 })"""
 
 
+def inspect_visible_images(page: Page) -> list[dict[str, Any]]:
+    """Inspect only images intersecting the currently visible browser viewport.
+
+    Useful when a full-page capture is too large to process safely. It does not
+    scroll or claim coverage of elements outside the initial viewport.
+    """
+    vp = getattr(page, "viewport_size", None) or {"width": 1280, "height": 720}
+    width, height = int(vp["width"]), int(vp["height"])
+    records = page.evaluate(_IMAGE_SCRIPT)
+    if not isinstance(records, list):
+        raise TypeError("The document did not return image inspection records.")
+    visible: list[dict[str, Any]] = []
+    for image in records:
+        if not isinstance(image, dict) or not image.get("rendered"):
+            continue
+        box = image.get("box")
+        if not isinstance(box, dict):
+            continue
+        try:
+            x, y = float(box["x"]), float(box["y"])
+            w, h = float(box["width"]), float(box["height"])
+            index = int(image["index"])
+        except (TypeError, ValueError, KeyError, OverflowError):
+            continue
+        if not (w > 0 and h > 0 and x < width and y < height and x + w > 0 and y + h > 0):
+            continue
+        # Document coordinates are screenshot coordinates at scrollY=0, but
+        # only the intersection with the initial viewport may be annotated.
+        left, top = max(0.0, x), max(0.0, y)
+        right, bottom = min(float(width), x + w), min(float(height), y + h)
+        status = image_status(
+            has_source=bool(image.get("src")),
+            complete=bool(image.get("complete")),
+            natural_width=int(image.get("natural_width") or 0),
+        )
+        visible.append({
+            "index": index, "src": image.get("src"),
+            "data_src": image.get("data_src"), "alt": image.get("alt"),
+            "status": status, "rendered": True,
+            "box": {"x": left, "y": top, "width": right - left,
+                    "height": bottom - top},
+        })
+    return visible
+
+
 def inspect_rendered_page(
     page: Page,
     *,
