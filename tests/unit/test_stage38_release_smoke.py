@@ -73,6 +73,8 @@ def test_auth_misconfiguration_fails(monkeypatch):
 def test_render_api_migration_and_scan_flags_unchanged():
     root = Path(__file__).resolve().parents[2]
     content = (root / "render.yaml").read_text(encoding="utf-8")
-    assert "preDeployCommand: /app/.venv/bin/python /app/scripts/postgres_temporary_migrate.py" in content
+    assert "dockerCommand: /bin/sh /app/deploy/start_api_render_free.sh" in content
+    assert "preDeployCommand:" not in content
+    assert "postgres_temporary_migrate.py" in (root / "deploy/start_api_render_free.sh").read_text(encoding="utf-8")
     assert 'PAGECHECK_PUBLIC_AUDITS_ENABLED\n        value: "0"' in content
     assert 'PAGECHECK_EGRESS_ISOLATED\n        value: "0"' in content

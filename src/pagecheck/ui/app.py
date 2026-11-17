@@ -12,6 +12,7 @@ from pagecheck.ui.components.report_data import (
 )
 from pagecheck.ui.components.report_view import render_report
 from pagecheck.ui.history_labels import history_option_label
+from pagecheck.ui.idle_guard import enable_idle_guard
 from pagecheck.ui.browser_recovery import browser_recovery
 from pagecheck.ui.temporary_client import (
     TemporaryRecoveryUnavailable, save_temporary, restore_temporary,
@@ -90,6 +91,7 @@ def _delete_history(api_url: str, audit_id: str) -> None:
 def render_app() -> None:
     st.set_page_config(page_title="Page Check", page_icon="🔎", layout="wide",
                        initial_sidebar_state="collapsed")
+    enable_idle_guard()  # Production-only, invisible while browsing normally.
 
     api_url = os.getenv("PAGECHECK_API_URL", "http://127.0.0.1:8000").rstrip("/")
     storage_backend = os.getenv("PAGECHECK_STORAGE_BACKEND", "sqlite").strip().lower()

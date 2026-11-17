@@ -1,15 +1,17 @@
-# STAGE32 - safe-by-default hosting scaffold. Public URL audits remain
-# DISABLED in production until isolated egress + abuse protection are reviewed.
-# WARNING: private services require a paid Render instance.
+# PAGE CHECK — Render Free (2 Web Services). Monthly instance-hours are shared.
+# All public URL audits remain DISABLED until hosted security and 512 MB
+# Chromium resource checks have passed. No paid private/cron plans are declared.
 services:
-  - type: pserv
+  - type: web
     name: pagecheck-api
     runtime: docker
     region: ohio
-    plan: 1c-2g
+    plan: free
+    autoDeployTrigger: 'off'
     dockerfilePath: ./deploy/Dockerfile.api
     dockerContext: .
-    preDeployCommand: /app/.venv/bin/python /app/scripts/postgres_temporary_migrate.py
+    dockerCommand: /bin/sh /app/deploy/start_api_render_free.sh
+    healthCheckPath: /health
     envVars:
       - key: PAGECHECK_ENV
         value: production
@@ -19,8 +21,6 @@ services:
         value: "0"
       - key: PAGECHECK_ALLOW_LOCAL_STATIC_ENGINES
         value: "0"
-      # Do NOT change these flags until external egress isolation and
-      # production browser security have been verified independently.
       - key: PAGECHECK_PUBLIC_AUDITS_ENABLED
         value: "0"
       - key: PAGECHECK_EGRESS_ISOLATED
@@ -28,13 +28,14 @@ services:
       - key: PAGECHECK_PRIVATE_API_KEY
         generateValue: true
       - key: PAGECHECK_DATABASE_URL
-        sync: false  # Fill in Render dashboard; Neon credentials never enter Git.
+        sync: false # Neon database URL; set in Render secrets, never in git.
 
   - type: web
     name: pagecheck-ui
     runtime: docker
     region: ohio
-    plan: 0.5c-512mb
+    plan: free
+    autoDeployTrigger: 'off'
     dockerfilePath: ./deploy/Dockerfile.ui
     dockerContext: .
     healthCheckPath: /_stcore/health
@@ -51,28 +52,18 @@ services:
         value: "0"
       - key: PAGECHECK_ALLOW_LIVE_BROWSER
         value: "0"
-      - key: PAGECHECK_API_HOSTPORT
+      - key: PAGECHECK_UI_IDLE_GUARD
+        value: "1"
+      - key: PAGECHECK_UI_IDLE_MINUTES
+        value: "15"
+      # HTTPS service-to-service requests; no Render private network required.
+      - key: PAGECHECK_API_URL
         fromService:
           name: pagecheck-api
-          type: pserv
-          property: hostport
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
       - key: PAGECHECK_PRIVATE_API_KEY
         fromService:
           name: pagecheck-api
-          type: pserv
+          type: web
           envVarKey: PAGECHECK_PRIVATE_API_KEY
-
-  - type: cron
-    name: pagecheck-expired-audit-cleanup
-    runtime: docker
-    region: ohio
-    plan: 0.5c-512mb
-    schedule: "0 * * * *"   # Once per hour, UTC.
-    dockerfilePath: ./deploy/Dockerfile.ui
-    dockerContext: .
-    dockerCommand: /app/deploy/run_cleanup.sh
-    envVars:
-      - key: PAGECHECK_ENV
-        value: production
-      - key: PAGECHECK_DATABASE_URL
-        sync: false  # Same Neon URL as the private API; configure separately.

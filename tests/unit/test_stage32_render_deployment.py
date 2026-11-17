@@ -8,17 +8,19 @@ def _text(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_render_blueprint_is_fail_closed_and_keeps_api_private():
+def test_render_blueprint_is_free_web_only_and_protected():
     manifest = _text("render.yaml")
-    assert "type: pserv" in manifest
-    assert "type: web" in manifest
-    assert "type: cron" in manifest
+    assert manifest.count("- type: web") == 2
+    assert manifest.count("plan: free") == 2
+    assert "type: pserv" not in manifest
+    assert "type: cron" not in manifest
+    assert "preDeployCommand:" not in manifest
     assert "PAGECHECK_ENV\n        value: production" in manifest
     assert 'PAGECHECK_ALLOW_LIVE_FETCH\n        value: "0"' in manifest
     assert 'PAGECHECK_ALLOW_LIVE_BROWSER\n        value: "0"' in manifest
     assert "PAGECHECK_DATABASE_URL\n        sync: false" in manifest
     assert "PAGECHECK_PRIVATE_API_KEY\n        generateValue: true" in manifest
-    assert "property: hostport" in manifest
+    assert "envVarKey: RENDER_EXTERNAL_URL" in manifest
     assert "envVarKey: PAGECHECK_PRIVATE_API_KEY" in manifest
     assert "healthCheckPath: /_stcore/health" in manifest
 
@@ -34,7 +36,9 @@ def test_production_dockerfiles_and_shell_commands_match_entrypoints():
     assert "playwright==1.57.0" in api
     assert "playwright install --with-deps chromium" in api
     assert '"--workers", "1"' in api
-    assert 'export PAGECHECK_API_URL="http://${PAGECHECK_API_HOSTPORT}"' in start
+    assert "FastAPI URL must use HTTPS" in start
+    assert "PAGECHECK_API_URL" in start
+    assert "deploy/start_api_render_free.sh" in api
     assert "streamlit run streamlit_app.py" in start
     assert "scripts/postgres_temporary_cleanup.py" in cron
     for relative in ("main.py", "streamlit_app.py", "uv.lock", "migrations/0001_temporary_postgres.sql"):

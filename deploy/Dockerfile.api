@@ -35,6 +35,8 @@ RUN uv pip install --python /app/.venv/bin/python playwright==1.57.0 && \
 COPY main.py ./
 COPY migrations/ ./migrations/
 COPY scripts/postgres_temporary_migrate.py ./scripts/postgres_temporary_migrate.py
+COPY scripts/postgres_temporary_cleanup.py ./scripts/postgres_temporary_cleanup.py
+COPY deploy/start_api_render_free.sh ./deploy/start_api_render_free.sh
 RUN useradd --system --home-dir /app --shell /usr/sbin/nologin pagecheck && \
     mkdir -p /app/artifacts && chown -R pagecheck:pagecheck /app
 USER pagecheck
