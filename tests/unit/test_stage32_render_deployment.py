@@ -29,7 +29,7 @@ def test_production_dockerfiles_and_shell_commands_match_entrypoints():
     start = _text("deploy/start_streamlit.sh")
     cron = _text("deploy/run_cleanup.sh")
     for dockerfile in (api, ui):
-        assert "uv sync --frozen --no-dev" in dockerfile
+        assert "uv sync --locked --no-dev" in dockerfile
         assert "USER pagecheck" in dockerfile
     assert "playwright==1.57.0" in api
     assert "playwright install --with-deps chromium" in api

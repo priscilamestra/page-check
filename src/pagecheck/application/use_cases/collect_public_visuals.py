@@ -13,6 +13,8 @@ from uuid import uuid4
 
 from playwright.sync_api import Browser, sync_playwright
 
+from pagecheck.acquisition.browser.egress_guard import launch_guarded_chromium
+
 from pagecheck.acquisition.browser.public_navigation import (
     fetch_public_resource, install_guarded_routes,
 )
@@ -233,7 +235,7 @@ def collect_public_visuals(
         finally:
             browser.close()
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        browser = launch_guarded_chromium(playwright.chromium)
         try:
             return capture_with_browser(browser, url=url, output_dir=directory,
                                         include_rendering_hints=True)

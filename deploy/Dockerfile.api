@@ -11,13 +11,14 @@ WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:0.10.0 /uv /uvx /usr/local/bin/
 COPY pyproject.toml uv.lock README.md ./
 COPY src/ ./src/
-RUN uv sync --frozen --no-dev --no-editable
+RUN uv sync --locked --no-dev --no-editable
 
 # Runtime Playwright is currently missing from the project's uv.lock. Keep
 # this pinned and isolated to the API container. Reconcile it into uv.lock
 # before a production release; never use an unpinned moving 'latest'.
 RUN uv pip install --python /app/.venv/bin/python playwright==1.57.0 && \
-    python -m playwright install --with-deps chromium
+    python -m playwright install --with-deps chromium && \
+    python -c "from bs4 import BeautifulSoup; from PIL import Image; from playwright.sync_api import sync_playwright; from pagecheck.api.app import app; print('API_RUNTIME_IMPORTS_OK')"
 
 COPY main.py ./
 COPY migrations/ ./migrations/
