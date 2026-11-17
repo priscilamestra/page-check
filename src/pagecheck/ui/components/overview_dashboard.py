@@ -20,7 +20,11 @@ OVERVIEW_STYLES = """
 .pc-kpi{padding:16px 14px;min-height:145px;display:flex;flex-direction:column;justify-content:space-between}
 .pc-kpi-label{font-size:.83rem;font-weight:650;letter-spacing:.01em;opacity:.86;margin-bottom:8px}
 .pc-kpi-main{font-size:2rem;line-height:1.1;font-weight:740;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
-.pc-kpi-note{font-size:.75rem;line-height:1.35;opacity:.72;margin-top:9px}
+/* Keep the SEO card focused on its approved metric: label + centered ring. */
+.pc-kpi-seo{justify-content:flex-start}
+.pc-kpi-seo .pc-kpi-inline{flex:1;align-items:center;justify-content:center;gap:0}
+.pc-kpi-seo .pc-donut{width:92px;height:92px}
+.pc-kpi-seo .pc-donut-hole{width:70px;height:70px;font-size:1.27rem}
 .pc-kpi-inline{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
 .pc-donut{--pct:0%;--accent:#269d80;flex:0 0 auto;width:69px;height:69px;border-radius:50%;
  background:conic-gradient(var(--accent) 0% var(--pct),rgba(127,127,127,.24) var(--pct) 100%);
@@ -91,27 +95,23 @@ def metric_cards_html(
     *, seo_score: object, seo_partial: bool, issues: int, reviews: int,
     completed: int, partial: int, not_verified: int,
 ) -> str:
-    """Four compact cards: SEO subset, confirmed issues, reviews and source coverage."""
+    """Four compact cards: measured SEO score, issues, reviews, source coverage."""
     score = _score_value(seo_score)
     completed, partial, not_verified = map(_nonnegative, (completed, partial, not_verified))
     total = completed + partial + not_verified
     if score is None:
         ring = '<div class="pc-donut" style="--pct:0%;--accent:#8492a8"><span class="pc-donut-hole">—</span></div>'
-        seo_note = "No scored SEO result"
     else:
-        ring = (f'<div class="pc-donut" role="img" aria-label="Technical SEO score: {score} out of 100; '
-                f'eligible rules only" style="--pct:{score}%;--accent:#269d80">'
+        ring = (f'<div class="pc-donut" role="img" aria-label="Technical SEO score: {score} out of 100" style="--pct:{score}%;--accent:#269d80">'
                 f'<span class="pc-donut-hole">{score}</span></div>')
-        seo_note = ("Partial SEO score · eligible rules only" if seo_partial
-                    else "Eligible SEO rules · not a site-wide score")
     done_width = completed / total * 100 if total else 0
     partial_width = partial / total * 100 if total else 0
     missing_width = not_verified / total * 100 if total else 0
     source_label = f"{completed}/{total}" if total else "—"
     return (
         '<section class="pc-kpis" aria-label="Audit summary">'
-        '<div class="pc-kpi"><div class="pc-kpi-label">Technical SEO · scoped</div>'
-        f'<div class="pc-kpi-inline">{ring}<div class="pc-kpi-note">{seo_note}</div></div></div>'
+        '<div class="pc-kpi pc-kpi-seo"><div class="pc-kpi-label">Technical SEO</div>'
+        f'<div class="pc-kpi-inline">{ring}</div></div>'
         '<div class="pc-kpi"><div class="pc-kpi-label">Confirmed issues</div>'
         f'<div class="pc-kpi-main pc-kpi-value-red">{_nonnegative(issues)}</div>'
         '</div>'

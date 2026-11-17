@@ -18,8 +18,11 @@ def test_overview_three_compact_cards_one_wide_coverage():
     assert "minmax(0,1.35fr)" in OVERVIEW_STYLES
     result = metric_cards_html(seo_score=90, seo_partial=False, issues=0, reviews=2,
                                completed=2, partial=2, not_verified=3)
-    assert "Eligible SEO rules" in result
-    assert "pc-kpi-inline" in result
+    assert 'class="pc-kpi-label">Technical SEO</div>' in result
+    assert 'pc-kpi-seo' in result
+    assert 'Eligible SEO rules' not in result
+    assert 'not a site-wide score' not in result
+    assert 'pc-kpi-inline' in result
     assert "2/7" in result
     assert "Reported by executed checks" not in result
 

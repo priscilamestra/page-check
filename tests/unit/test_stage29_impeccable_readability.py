@@ -36,11 +36,15 @@ def test_grouping_unknown_category_is_safe_and_empty_has_no_groups():
     assert grouped_observations([{"check_id": "other", "title": "Other"}])[0]["label"] == "Other"
 
 
-def test_seo_score_discloses_scope_inline():
+def test_seo_card_preserves_approved_label_and_centers_ring():
     html = metric_cards_html(seo_score=100, seo_partial=False, issues=0, reviews=2,
                              completed=2, partial=2, not_verified=3)
-    assert "Technical SEO · scoped" in html
-    assert "not a site-wide score" in html
+    assert 'class="pc-kpi-label">Technical SEO</div>' in html
+    assert 'pc-kpi pc-kpi-seo' in html
+    assert 'not a site-wide score' not in html
+    assert 'scoped' not in html
+    assert 'Eligible SEO rules' not in html
+    assert '.pc-kpi-seo .pc-kpi-inline{flex:1;align-items:center;justify-content:center' in OVERVIEW_STYLES
     assert "2/7" in html
     assert "minmax(0,1.35fr)" in OVERVIEW_STYLES
 
