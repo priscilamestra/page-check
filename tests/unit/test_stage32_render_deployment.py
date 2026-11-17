@@ -45,8 +45,8 @@ def test_prod_security_gates_still_enabled():
     # The UI must not silently run with a missing production sandbox.
     app = _text("src/pagecheck/ui/app.py")
     policy = _text("src/pagecheck/common/security/deployment.py")
-    assert 'st.form_submit_button("Audit page", type="primary", disabled=is_production)' in app
-    assert "return is_local_development() and" in policy
+    assert 'st.form_submit_button("Audit page", type="primary", disabled=scans_unavailable)' in app
+    assert "production_scan_configured()" in policy
     assert "PAGECHECK_ALLOW_LIVE_FETCH" in policy
 
 

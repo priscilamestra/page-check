@@ -1,9 +1,10 @@
-"""Auditoria HTML combinada. Execução remota somente em ambiente local opt-in."""
-import os
-import ipaddress
-from fastapi import APIRouter, HTTPException, Request
+"""Private audit endpoint with guarded production admission and optional visuals."""
+from __future__ import annotations
 
-from pagecheck.common.security.deployment import live_fetch_enabled
+import ipaddress
+import os
+
+from fastapi import APIRouter, HTTPException, Request
 
 from pagecheck.acquisition.http.fetcher import FetchError
 from pagecheck.acquisition.http.safe_transport import UnsafeDestination
@@ -11,36 +12,58 @@ from pagecheck.api.schemas.audit import PageAuditRequest
 from pagecheck.application.use_cases.audit_page_html import audit_page_html
 from pagecheck.application.use_cases.collect_public_visuals import collect_public_visuals
 from pagecheck.application.use_cases.collect_static_engines import collect_static_engines
+from pagecheck.common.security.admission import (AuditAdmissionError,
+                                                 production_audit_admission)
+from pagecheck.common.security.deployment import (is_local_development,
+                                                   live_browser_enabled, live_fetch_enabled)
+from pagecheck.common.security.private_api import require_private_service
 from pagecheck.common.security.url_validation import URLValidationError, validate_public_url
 
 router = APIRouter(prefix="/v1/audits", tags=["audit"])
 
-@router.post("/page")
-def audit_page(payload: PageAuditRequest, request: Request) -> dict:
-    if not live_fetch_enabled():
-        raise HTTPException(503, "Live URL fetching is disabled. Enable it only for local development.")
-    try:
-        url = validate_public_url(payload.url)
-        kwargs = {"niche": payload.niche, "objective": payload.objective}
-        # Preserve the original call shape for legacy consumers and patched tests.
-        if payload.language != "en" or payload.keywords:
-            kwargs.update(language=payload.language, keywords=payload.keywords)
-        wants_browser = os.getenv("PAGECHECK_ALLOW_LIVE_BROWSER") == "1"
-        wants_engines = os.getenv("PAGECHECK_ALLOW_LOCAL_STATIC_ENGINES") == "1"
-        if wants_browser or wants_engines:
-            # An explicit local-only opt-in is required for experimental browser
-            # capture. Remote callers cannot activate the Chromium runtime.
+
+def _execute_audit(payload: PageAuditRequest, request: Request) -> dict:
+    # Private service authorization is mandatory in production even though the
+    # API is also on Render's private network. Never reveal the key to browsers.
+    if not is_local_development():
+        require_private_service(request)
+    url = validate_public_url(payload.url)
+    kwargs = {"niche": payload.niche, "objective": payload.objective}
+    if payload.language != "en" or payload.keywords:
+        kwargs.update(language=payload.language, keywords=payload.keywords)
+    wants_browser = live_browser_enabled()
+    wants_engines = (is_local_development() and
+                     os.getenv("PAGECHECK_ALLOW_LOCAL_STATIC_ENGINES") == "1")
+    if wants_browser or wants_engines:
+        if is_local_development():
+            # Preserve the local-only opt-in of previous stages.
             try:
                 is_local = ipaddress.ip_address(request.client.host).is_loopback
             except (ValueError, AttributeError):
                 is_local = False
             if not is_local:
                 raise HTTPException(403, "Visual browser mode is restricted to local requests.")
-            if wants_browser:
-                kwargs["visual_collector"] = collect_public_visuals
-            if wants_engines:
-                kwargs["external_collector"] = collect_static_engines
-        return audit_page_html(url, **kwargs)
+        if wants_browser:
+            kwargs["visual_collector"] = collect_public_visuals
+        if wants_engines:
+            kwargs["external_collector"] = collect_static_engines
+    return audit_page_html(url, **kwargs)
+
+
+@router.post("/page")
+def audit_page(payload: PageAuditRequest, request: Request) -> dict:
+    if not live_fetch_enabled():
+        raise HTTPException(503, "Live URL auditing is disabled by deployment policy.")
+    if not is_local_development():
+        require_private_service(request)  # Reject unauthorized callers before consuming a quota slot.
+    try:
+        if is_local_development():
+            return _execute_audit(payload, request)
+        # A single Uvicorn worker is required by the Stage33 deployment policy.
+        with production_audit_admission.enter():
+            return _execute_audit(payload, request)
+    except AuditAdmissionError as exc:
+        raise HTTPException(429, str(exc), headers={"Retry-After": "60"}) from exc
     except (UnsafeDestination, URLValidationError) as exc:
         raise HTTPException(403, "This network destination is not permitted.") from exc
     except FetchError as exc:

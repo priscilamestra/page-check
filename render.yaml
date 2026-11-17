@@ -18,6 +18,12 @@ services:
         value: "0"
       - key: PAGECHECK_ALLOW_LOCAL_STATIC_ENGINES
         value: "0"
+      # Do NOT change these flags until external egress isolation and
+      # production browser security have been verified independently.
+      - key: PAGECHECK_PUBLIC_AUDITS_ENABLED
+        value: "0"
+      - key: PAGECHECK_EGRESS_ISOLATED
+        value: "0"
       - key: PAGECHECK_PRIVATE_API_KEY
         generateValue: true
       - key: PAGECHECK_DATABASE_URL
@@ -36,6 +42,14 @@ services:
         value: production
       - key: PAGECHECK_STORAGE_BACKEND
         value: postgres_temporary
+      - key: PAGECHECK_PUBLIC_AUDITS_ENABLED
+        value: "0"
+      - key: PAGECHECK_EGRESS_ISOLATED
+        value: "0"
+      - key: PAGECHECK_ALLOW_LIVE_FETCH
+        value: "0"
+      - key: PAGECHECK_ALLOW_LIVE_BROWSER
+        value: "0"
       - key: PAGECHECK_API_HOSTPORT
         fromService:
           name: pagecheck-api

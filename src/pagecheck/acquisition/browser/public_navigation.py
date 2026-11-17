@@ -7,6 +7,7 @@ adicional no nível do sistema operacional (sandbox de rede) ainda é necessári
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from time import monotonic
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -104,6 +105,7 @@ def install_guarded_routes(
     fetch_resource=fetch_public_resource,
     max_requests: int = MAX_REQUESTS,
     max_total_bytes: int = MAX_TOTAL_BYTES,
+    max_elapsed_seconds: int = 65,
 ) -> NavigationReport:
     """Intercepta HTTP(S) e entrega somente conteúdo vindo do fetcher fixado.
 
@@ -113,12 +115,17 @@ def install_guarded_routes(
         raise ValueError("Limite de requisições inválido.")
     if not 1 <= max_total_bytes <= MAX_TOTAL_BYTES:
         raise ValueError("Limite de tráfego inválido.")
+    if not 5 <= max_elapsed_seconds <= 120:
+        raise ValueError("Tempo limite inválido.")
     report = NavigationReport()
+    started = monotonic()
 
     def handle(route: Route) -> None:
         request = route.request
         report.requested += 1
         try:
+            if monotonic() - started > max_elapsed_seconds:
+                raise BrowserFetchBlocked("Limite de duração do navegador excedido.")
             if request.method != "GET":
                 raise BrowserFetchBlocked("Somente GET é permitido.")
             if request.resource_type not in _ALLOWED_TYPES:

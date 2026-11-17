@@ -16,6 +16,7 @@ from pagecheck.ui.browser_recovery import browser_recovery
 from pagecheck.ui.temporary_client import (
     TemporaryRecoveryUnavailable, save_temporary, restore_temporary,
 )
+from pagecheck.common.security.deployment import production_scan_configured
 from pagecheck.ui.history_resume import (
     clear_active_audit, remember_active_audit, resume_active_audit,
 )
@@ -40,6 +41,8 @@ def _page_live_report(api_url: str, *, url: str, niche: str, objective: str,
             f"{api_url}/v1/audits/page",
             json={"url": url, "niche": niche, "objective": objective,
                   "language": language, "keywords": keywords or []},
+            headers=({"X-PageCheck-Service-Key": os.environ["PAGECHECK_PRIVATE_API_KEY"]}
+                     if os.environ.get("PAGECHECK_PRIVATE_API_KEY") else {}),
             timeout=120.0,
         )
         response.raise_for_status()
@@ -51,10 +54,7 @@ def _page_live_report(api_url: str, *, url: str, niche: str, objective: str,
         except (ValueError, AttributeError):
             pass
         if exc.response.status_code == 503:
-            raise ValueError(
-                "Live URL fetching is disabled in the API. For local development, "
-                "restart FastAPI with PAGECHECK_ALLOW_LIVE_FETCH=1."
-            ) from exc
+            raise ValueError("Page auditing is not currently available on the API.") from exc
         raise ValueError(f"The audit could not be completed: {message}") from exc
     except httpx.RequestError as exc:
         raise ValueError(f"Could not reach the API: {exc}") from exc
@@ -150,9 +150,9 @@ def render_app() -> None:
                 st.badge("FastAPI disconnected", color="gray")
 
     st.subheader("New audit")
-    if is_production:
-        st.warning("Public URL scans are disabled until the scanner has an isolated "
-                   "network/runtime and access controls. Local development remains available.")
+    scans_unavailable = is_production and not production_scan_configured()
+    if scans_unavailable:
+        st.warning("Public URL auditing is not yet enabled in this deployment.")
     with st.form("audit_form"):
         url = st.text_input("Public page URL", placeholder="https://your-domain.com/page")
         left, middle, right = st.columns([2, 1, 2])
@@ -179,7 +179,7 @@ def render_app() -> None:
             help="Add up to eight words or phrases. These guide content checks; "
                  "they do not replace technical SEO checks or query Google rankings.",
         )
-        run = st.form_submit_button("Audit page", type="primary", disabled=is_production)
+        run = st.form_submit_button("Audit page", type="primary", disabled=scans_unavailable)
     st.caption("Scan a public page for SEO, navigation and conversion issues. "
                "Your report will show what could be checked.")
     if run:
