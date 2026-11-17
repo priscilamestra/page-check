@@ -9,6 +9,7 @@ services:
     plan: 1c-2g
     dockerfilePath: ./deploy/Dockerfile.api
     dockerContext: .
+    preDeployCommand: /app/.venv/bin/python /app/scripts/postgres_temporary_migrate.py
     envVars:
       - key: PAGECHECK_ENV
         value: production
