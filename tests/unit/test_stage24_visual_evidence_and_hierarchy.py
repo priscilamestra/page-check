@@ -37,7 +37,10 @@ def test_unverified_image_becomes_capture_only_warning():
     assert len(findings) == 1
     assert findings[0]["status"] == "warning"
     assert findings[0]["evidence"]["capture_only"] is True
-    assert not build_capture_image_warnings({"images": [{**images[0], "complete": False}]})
+    pending = build_capture_image_warnings({"images": [{**images[0], "complete": False}]})
+    assert len(pending) == 1
+    assert pending[0]["status"] == "warning"
+    assert pending[0]["evidence"]["finished_loading"] is False
 
 
 def test_annotation_warning_uses_box_and_preserves_original(tmp_path):

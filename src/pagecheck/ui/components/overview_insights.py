@@ -74,6 +74,31 @@ def prioritized_findings(report: Mapping[str, Any], limit: int = 3) -> list[dict
     return findings[:max(0, limit)]
 
 
+
+def prioritized_unique_findings(report: Mapping[str, Any], limit: int = 10) -> list[dict[str, Any]]:
+    """Prioritize up to ``limit`` distinct actionable problems.
+
+    Repeated checks about the same issue (for example, the same image symptom
+    observed on desktop and mobile) are summarized, but every underlying
+    finding remains available in the Issues tab and exported report.
+    """
+    ordered = prioritized_findings(report, limit=len(report.get("findings") or []))
+    grouped: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
+    for row in ordered:
+        key = (
+            str(row.get("module") or ""),
+            str(row.get("title") or ""),
+            str(row.get("recommendation") or ""),
+            str(row.get("severity") or ""),
+            str(row.get("status") or ""),
+        )
+        if key in grouped:
+            grouped[key]["occurrences"] += 1
+            continue
+        grouped[key] = {**row, "occurrences": 1}
+    return list(grouped.values())[:max(0, limit)]
+
+
 def missing_evidence_rows(report: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [{"area": area, "total": count} for area, count in not_verified_by_area(report)]
 

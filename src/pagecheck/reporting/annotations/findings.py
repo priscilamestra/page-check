@@ -50,15 +50,16 @@ def build_image_findings(probe: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def build_capture_image_warnings(probe: dict[str, Any]) -> list[dict[str, Any]]:
-    """Show visible missing images as capture warnings, not verified site defects.
+    """Flag an image that did not display *in the restricted screenshot*.
 
-    An aborted resource, JS-only image, or incomplete render is NOT evidence of
-    a broken origin asset. Require a visible box plus finished empty image.
+    A pending/lazy image is a capture limitation, not a confirmed defect of
+    the target website. Only visible, sourced <img> elements with a usable box
+    can be marked. A successfully decoded image is never flagged.
     """
     result: list[dict[str, Any]] = []
     for image in probe.get("images", []):
         if (not isinstance(image, dict) or image.get("status") != "not_verified"
-                or not image.get("rendered") or image.get("complete") is not True
+                or not image.get("rendered")
                 or int(image.get("natural_width") or 0) > 0):
             continue
         box = image.get("box")
@@ -74,19 +75,25 @@ def build_capture_image_warnings(probe: dict[str, Any]) -> list[dict[str, Any]]:
                 continue
         except (TypeError, ValueError, KeyError, OverflowError):
             continue
+        finished = image.get("complete") is True
         result.append({
             "id": f"capture-image-missing-{index}", "category": "images",
             "severity": "low", "status": "warning",
-            "title": "Image not displayed in the audit capture",
-            "description": "The visible image has no decoded pixels in the restricted capture. "
-                           "This does not prove a defect on the live website.",
-            "action": "Open the image URL in a normal browser and check JS/lazy loading "
-                      "before treating this as a site issue.",
+            "title": "Image missing in the audit screenshot",
+            "description": (
+                "The visible image was not decoded in the restricted browser capture. "
+                "This does not prove the live page is broken."
+            ) if finished else (
+                "This visible image had not finished loading when the screenshot was taken. "
+                "It may depend on lazy loading or JavaScript; this does not prove a site defect."
+            ),
+            "action": "Check the image in a normal browser and verify its source "
+                      "and lazy-loading behavior if it remains missing.",
             "owner": "Frontend / Content", "element_index": index,
             "evidence": {"src": str(image.get("src") or ""),
                          "alt": str(image.get("alt") or ""),
                          "data_src": str(image.get("data_src") or ""),
-                         "capture_only": True},
+                         "capture_only": True, "finished_loading": finished},
             "box": coords,
         })
     return result

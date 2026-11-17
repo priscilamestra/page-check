@@ -18,7 +18,7 @@ from pagecheck.ui.components.overview_dashboard import (
     OVERVIEW_STYLES, findings_html, metric_cards_html,
 )
 from pagecheck.ui.components.overview_insights import (
-    prioritized_findings, source_counts,
+    prioritized_unique_findings, source_counts,
 )
 from pagecheck.ui.components.report_data import issue_counts
 
@@ -44,7 +44,7 @@ def render_overview(report: dict[str, Any], *, root: Path, zip_data: bytes | Non
     ), unsafe_allow_html=True)
 
     st.markdown("#### Fix these first")
-    priorities = prioritized_findings(report, limit=4)
+    priorities = prioritized_unique_findings(report, limit=10)
     if priorities:
         prepared = []
         for item in priorities:
@@ -52,7 +52,7 @@ def render_overview(report: dict[str, Any], *, root: Path, zip_data: bytes | Non
             prepared.append({
                 "title": title, "recommendation": recommendation,
                 "status": item.get("status"), "severity": item.get("severity"),
-                "area": item.get("module"),
+                "area": item.get("module"), "occurrences": item.get("occurrences", 1),
             })
         st.markdown(findings_html(prepared), unsafe_allow_html=True)
     else:
@@ -66,5 +66,3 @@ def render_overview(report: dict[str, Any], *, root: Path, zip_data: bytes | Non
              for row in source_rows(report)],
             hide_index=True, use_container_width=True, height=292,
         )
-        # Coverage limitations remain available in the structured source table;
-        # avoid duplicating them as long technical captions below the chart.

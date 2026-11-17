@@ -8,6 +8,8 @@ from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
+from pagecheck.reporting.annotations.marker_style import marker_color, finding_category
+
 
 class AnnotationError(ValueError):
     """A evidência não pode ser representada nas dimensões fornecidas."""
@@ -64,8 +66,10 @@ def annotate_screenshot(
         if x2 <= x1 or y2 <= y1:
             continue
         number = len(marks) + 1
-        # Amber = needs review in this capture; red = confirmed failure.
-        mark_color = (198, 122, 33) if item.get("status") == "warning" else (199, 48, 54)
+        # Stable category colors match the category labels in Screenshots.
+        # Red remains reserved for confirmed failures.
+        hex_color = marker_color(item)
+        mark_color = tuple(int(hex_color[i:i+2], 16) for i in (1, 3, 5))
         draw.rectangle((x1, y1, x2, y2), outline=mark_color, width=3)
         label = str(number)
         text_box = draw.textbbox((0, 0), label, font=font)
@@ -81,6 +85,7 @@ def annotate_screenshot(
                       "title": item.get("title", "Problema visual"),
                       "severity": item.get("severity", "warning"),
                       "owner": item.get("owner", "Revisão"),
+                      "category": finding_category(item), "color": hex_color,
                       "box_pixels": {"x": x1, "y": y1, "width": x2-x1, "height": y2-y1}})
 
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -94,3 +99,32 @@ def write_annotation_manifest(manifest: dict[str, Any], destination: str | Path)
     path = Path(destination)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def link_marker_numbers(findings: list[dict[str, Any]], annotation: dict[str, Any],
+                        groups: list[list[dict[str, Any]]] | None = None) -> None:
+    """Attach actual screenshot marker IDs to their findings for API/report consumers.
+
+    Findings whose boxes are outside the captured image receive no number.
+    A single marker may describe multiple findings at the same location.
+    """
+    marker_by_id = {mark["finding_id"]: mark for mark in annotation.get("markers", [])}
+    number_by_id = {key: mark["number"] for key, mark in marker_by_id.items()}
+    color_by_id = {key: mark.get("color") for key, mark in marker_by_id.items()}
+    if groups:
+        for group in groups:
+            if group and group[0].get("id") in number_by_id:
+                for finding in group:
+                    number_by_id[finding["id"]] = number_by_id[group[0]["id"]]
+                    color_by_id[finding["id"]] = color_by_id[group[0]["id"]]
+    for finding in findings:
+        number = number_by_id.get(finding.get("id"))
+        if number is None:
+            continue
+        evidence = finding.get("evidence")
+        if not isinstance(evidence, dict):
+            evidence = {}
+            finding["evidence"] = evidence
+        evidence["marker_number"] = number
+        if color_by_id.get(finding.get("id")):
+            evidence["marker_color"] = color_by_id[finding["id"]]

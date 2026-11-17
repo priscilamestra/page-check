@@ -18,10 +18,14 @@ from pagecheck.acquisition.browser.public_navigation import (
 )
 from pagecheck.application.use_cases.audit_visual_viewport import audit_visual_viewport
 from pagecheck.acquisition.browser.visual_probe import inspect_visible_images
-from pagecheck.acquisition.browser.visual_hierarchy import inspect_heading_hierarchy
+from pagecheck.acquisition.browser.visual_hierarchy import inspect_heading_hierarchy, make_design_review
+from pagecheck.acquisition.browser.layout_probe import collect_layout_observations
+from pagecheck.audits.layout.rules import build_layout_findings
 from pagecheck.reporting.annotations.findings import (build_image_findings,
     build_capture_image_warnings)
-from pagecheck.reporting.annotations.overlay import annotate_screenshot, write_annotation_manifest
+from pagecheck.reporting.annotations.overlay import (
+    annotate_screenshot, write_annotation_manifest, link_marker_numbers,
+)
 from pagecheck.common.security.url_validation import validate_public_url
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -100,6 +104,22 @@ def capture_with_browser(
                 except (TypeError, ValueError, AttributeError):
                     hierarchy = {"status": "not_verified", "headings_checked": 0, "findings": []}
                 findings += hierarchy["findings"]
+                # The screenshot is intentionally limited to the first screen,
+                # but geometry can still be inspected across the rendered DOM.
+                geometry_checked = False
+                geometry_truncated = False
+                layout_findings = []
+                try:
+                    layout = collect_layout_observations(page)
+                    geometry_checked = (isinstance(layout, dict) and
+                                        isinstance(layout.get("viewport_width"), (int, float)) and
+                                        isinstance(layout.get("document_width"), (int, float)))
+                    if geometry_checked:
+                        layout_findings = build_layout_findings(layout)
+                        geometry_truncated = layout.get("truncated") is True
+                except (TypeError, ValueError, AttributeError):
+                    pass
+                findings.extend(layout_findings)
                 for finding in findings[:]:
                     if finding.get("category") != "images" or finding.get("status") != "failed":
                         continue
@@ -118,6 +138,7 @@ def capture_with_browser(
                         viewport_width=width,
                         page_height=height,
                     )
+                    link_marker_numbers(findings, annotated)
                     screenshot_paths["annotated"] = str(annotated_path)
                     manifest = folder / "annotations.json"
                     write_annotation_manifest({**annotated, "findings": findings}, manifest)
@@ -125,9 +146,12 @@ def capture_with_browser(
                     "viewport": viewport,
                     "screenshots": screenshot_paths,
                     "findings": findings,
-                    "design_review": {"status": hierarchy["status"],
-                                      "headings_checked": hierarchy["headings_checked"],
-                                      "scope": "first viewport"},
+                    "design_review": make_design_review(
+                        hierarchy, layout_findings=layout_findings,
+                        geometry_checked=geometry_checked,
+                        geometry_truncated=geometry_truncated,
+                        screenshot_scope="initial_viewport",
+                    ),
                     "scroll_complete": False,
                     "geometry": {"document_height": document_height, "truncated": True},
                     "images": {

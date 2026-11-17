@@ -12,13 +12,15 @@ from PIL import Image
 from playwright.sync_api import Page
 
 from pagecheck.acquisition.browser.visual_probe import inspect_rendered_page
-from pagecheck.acquisition.browser.visual_hierarchy import inspect_heading_hierarchy
+from pagecheck.acquisition.browser.visual_hierarchy import inspect_heading_hierarchy, make_design_review
 from pagecheck.acquisition.browser.layout_probe import collect_layout_observations
 from pagecheck.audits.images.visual_rules import build_image_quality_findings
 from pagecheck.audits.layout.rules import build_layout_findings
 from pagecheck.reporting.annotations.findings import (build_image_findings,
     build_capture_image_warnings)
-from pagecheck.reporting.annotations.overlay import annotate_screenshot, write_annotation_manifest
+from pagecheck.reporting.annotations.overlay import (
+    annotate_screenshot, write_annotation_manifest, link_marker_numbers,
+)
 
 
 def audit_visual_viewport(
@@ -61,7 +63,6 @@ def audit_visual_viewport(
                 (build_capture_image_warnings(visual) if include_rendering_hints else []) +
                 build_image_quality_findings(layout) +
                 layout_findings + hierarchy["findings"])
-    design_status = "needs_review" if layout_findings or hierarchy["findings"] else hierarchy["status"]
     findings.sort(key=lambda x: (float((x.get("box") or {}).get("y", 1e10)), x["id"]))
 
     screenshot = visual["screenshots"]["after_scroll"]
@@ -87,6 +88,7 @@ def audit_visual_viewport(
         {"finding_id": group[0]["id"], "related_ids": [f["id"] for f in group]}
         for group in by_region.values()
     ]
+    link_marker_numbers(findings, annotation, list(by_region.values()))
     manifest_path = directory / "annotations.json"
     write_annotation_manifest({**annotation, "marker_groups": marker_groups,
                                "findings": findings}, manifest_path)
@@ -99,10 +101,11 @@ def audit_visual_viewport(
                    "broken": visual["broken_image_count"],
                    "not_verified": visual["not_verified_image_count"]},
         "findings": findings,
-        "design_review": {"status": design_status,
-                          "headings_checked": hierarchy["headings_checked"],
-                          "layout_findings": len(layout_findings),
-                          "scope": "visible headings + page geometry"},
+        "design_review": make_design_review(
+            hierarchy, layout_findings=layout_findings, geometry_checked=True,
+            geometry_truncated=bool(layout.get("truncated")),
+            screenshot_scope="full_page",
+        ),
         "screenshots": {**visual["screenshots"], "annotated": str(target)},
         "manifest": str(manifest_path),
         "annotated_count": annotation["annotated_count"],

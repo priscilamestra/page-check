@@ -14,18 +14,18 @@ from typing import Any
 
 OVERVIEW_STYLES = """
 <style>
-.pc-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:8px 0 24px}
+.pc-kpis{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1.35fr);gap:10px;margin:8px 0 24px}
 .pc-kpi,.pc-panel{border:1px solid rgba(135,145,160,.25);border-radius:12px;
  background:var(--secondary-background-color,rgba(120,120,120,.08));color:var(--text-color,inherit)}
-.pc-kpi{padding:18px 17px;min-height:151px;display:flex;flex-direction:column;justify-content:space-between}
+.pc-kpi{padding:16px 14px;min-height:145px;display:flex;flex-direction:column;justify-content:space-between}
 .pc-kpi-label{font-size:.83rem;font-weight:650;letter-spacing:.01em;opacity:.86;margin-bottom:8px}
 .pc-kpi-main{font-size:2rem;line-height:1.1;font-weight:740;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
 .pc-kpi-note{font-size:.75rem;line-height:1.35;opacity:.72;margin-top:9px}
-.pc-kpi-inline{display:flex;gap:16px;align-items:center}
-.pc-donut{--pct:0%;--accent:#269d80;flex:0 0 auto;width:79px;height:79px;border-radius:50%;
+.pc-kpi-inline{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.pc-donut{--pct:0%;--accent:#269d80;flex:0 0 auto;width:69px;height:69px;border-radius:50%;
  background:conic-gradient(var(--accent) 0% var(--pct),rgba(127,127,127,.24) var(--pct) 100%);
  display:grid;place-items:center}
-.pc-donut-hole{width:62px;height:62px;display:grid;place-items:center;border-radius:50%;
+.pc-donut-hole{width:53px;height:53px;display:grid;place-items:center;border-radius:50%;
  background:var(--secondary-background-color,#202124);font-size:1.06rem;font-weight:750;
  letter-spacing:-.05em;font-variant-numeric:tabular-nums;color:var(--text-color,#f5f5f5)}
 .pc-kpi-value-green{color:#35b99a}.pc-kpi-value-red{color:#e77580}.pc-kpi-value-amber{color:#e7ac55}
@@ -55,7 +55,7 @@ OVERVIEW_STYLES = """
 .pc-area-issues{background:#de6b78;height:100%}.pc-area-review{background:#d6a04e;height:100%}
 .pc-chart-legend{display:flex;gap:18px;flex-wrap:wrap;font-size:.75rem;opacity:.79;margin:8px 0 13px}
 .pc-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
-@media(max-width:1100px){.pc-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:900px){.pc-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:610px){.pc-kpis{grid-template-columns:1fr}.pc-finding{grid-template-columns:1fr;gap:8px}
  .pc-area-row{grid-template-columns:minmax(85px,1fr) minmax(90px,2fr) auto;gap:8px}}
 </style>
@@ -102,21 +102,22 @@ def metric_cards_html(
         ring = (f'<div class="pc-donut" role="img" aria-label="Technical SEO score: {score} out of 100; '
                 f'eligible rules only" style="--pct:{score}%;--accent:#269d80">'
                 f'<span class="pc-donut-hole">{score}</span></div>')
-        seo_note = "Partial SEO scoring" if seo_partial else "Eligible SEO rules only"
+        seo_note = ("Partial SEO score · eligible rules only" if seo_partial
+                    else "Eligible SEO rules · not a site-wide score")
     done_width = completed / total * 100 if total else 0
     partial_width = partial / total * 100 if total else 0
     missing_width = not_verified / total * 100 if total else 0
     source_label = f"{completed}/{total}" if total else "—"
     return (
         '<section class="pc-kpis" aria-label="Audit summary">'
-        '<div class="pc-kpi"><div class="pc-kpi-label">Technical SEO</div>'
+        '<div class="pc-kpi"><div class="pc-kpi-label">Technical SEO · scoped</div>'
         f'<div class="pc-kpi-inline">{ring}<div class="pc-kpi-note">{seo_note}</div></div></div>'
         '<div class="pc-kpi"><div class="pc-kpi-label">Confirmed issues</div>'
         f'<div class="pc-kpi-main pc-kpi-value-red">{_nonnegative(issues)}</div>'
-        '<div class="pc-kpi-note">Reported by executed checks</div></div>'
+        '</div>'
         '<div class="pc-kpi"><div class="pc-kpi-label">Needs review</div>'
         f'<div class="pc-kpi-main pc-kpi-value-amber">{_nonnegative(reviews)}</div>'
-        '<div class="pc-kpi-note">Not confirmed defects</div></div>'
+        '</div>'
         '<div class="pc-kpi"><div class="pc-kpi-label">Sources completed</div>'
         f'<div class="pc-kpi-main">{source_label}</div>'
         '<div class="pc-progress" role="img" aria-label="'
@@ -147,6 +148,9 @@ def findings_html(rows: Sequence[Mapping[str, Any]]) -> str:
         pill_style = ("issue" if issue else ("review-low" if severity_name in {"low", "info"} else "review"))
         severity = _safe_text(str(row.get("severity") or "info").title(), 35)
         area = _safe_text(_area_label(row.get("area")), 70)
+        count = _nonnegative(row.get("occurrences"))
+        if count > 1:
+            area += f" · {count} occurrences"
         title = _safe_text(row.get("title") or "Untitled finding", 130)
         recommendation = _safe_text(row.get("recommendation"), 155)
         parts.append(

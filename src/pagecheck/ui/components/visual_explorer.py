@@ -43,7 +43,7 @@ def visual_cards(report: Mapping[str, Any], root: Path) -> list[dict[str, Any]]:
     return cards
 
 
-def visual_observations(report: Mapping[str, Any], viewport: str) -> list[dict[str, str]]:
+def visual_observations(report: Mapping[str, Any], viewport: str) -> list[dict[str, Any]]:
     """Only findings explicitly tied to the requested viewport; no invented markers."""
     raw = report.get("findings") or []
     if not isinstance(raw, list):
@@ -61,5 +61,10 @@ def visual_observations(report: Mapping[str, Any], viewport: str) -> list[dict[s
             "title": str(finding.get("title") or "Visual finding"),
             "status": str(finding.get("status")),
             "severity": str(finding.get("severity") or "info"),
+            "check_id": str(finding.get("check_id") or finding.get("id") or ""),
+            "description": str(finding.get("description") or ""),
+            "recommendation": str(finding.get("recommendation") or ""),
+            "evidence": dict(evidence),
+            "module": str(finding.get("module") or ""),
         })
     return output

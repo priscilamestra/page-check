@@ -131,7 +131,16 @@ def consolidate_audit(
             engine_limitations[engine] = (
                 [str(x) for x in item.get("limitations", [])]
                 if item is not None and isinstance(item.get("limitations"), list)
-                else ["Motor indisponível, não executado ou saída não confirmada."])
+                else [{
+                    "axe": ("Optional static accessibility engine not requested for this audit. "
+                            "Local use requires PAGECHECK_ALLOW_LOCAL_STATIC_ENGINES=1 and axe-core installed."),
+                    "impeccable": ("Optional Impeccable engine not requested. "
+                                   "Local use requires PAGECHECK_ALLOW_LOCAL_STATIC_ENGINES=1; "
+                                   "it only receives sanitized HTML without original CSS."),
+                    "lighthouse": ("Lighthouse was not run. Its separate Chrome session is "
+                                   "disabled for arbitrary public URLs until network isolation is available."),
+                }[engine] if external is None else
+                      "Engine unavailable, not executed or output not confirmed."])
             continue
         for row in _findings(item, f"external.{engine}"):
             checks.append(normalize_check(row, source=engine, page_url=final_url,
