@@ -1,0 +1,24 @@
+# Page Check UI. The API lives in a separate Render private service.
+FROM python:3.12-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_LINK_MODE=copy \
+    PATH="/app/.venv/bin:$PATH"
+WORKDIR /app
+
+# Pin uv to avoid a moving build tool version.
+COPY --from=ghcr.io/astral-sh/uv:0.10.0 /uv /uvx /usr/local/bin/
+COPY pyproject.toml uv.lock README.md ./
+COPY src/ ./src/
+RUN uv sync --frozen --no-dev --no-editable
+
+COPY streamlit_app.py ./
+COPY scripts/postgres_temporary_cleanup.py ./scripts/postgres_temporary_cleanup.py
+COPY deploy/start_streamlit.sh deploy/run_cleanup.sh ./deploy/
+RUN chmod +x ./deploy/*.sh && \
+    useradd --system --home-dir /app --shell /usr/sbin/nologin pagecheck && \
+    mkdir -p /app/artifacts && chown -R pagecheck:pagecheck /app
+USER pagecheck
+EXPOSE 10000
+CMD ["/app/deploy/start_streamlit.sh"]

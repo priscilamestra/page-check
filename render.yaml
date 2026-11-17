@@ -1,0 +1,63 @@
+# STAGE32 - safe-by-default hosting scaffold. Public URL audits remain
+# DISABLED in production until isolated egress + abuse protection are reviewed.
+# WARNING: private services require a paid Render instance.
+services:
+  - type: pserv
+    name: pagecheck-api
+    runtime: docker
+    region: ohio
+    plan: 1c-2g
+    dockerfilePath: ./deploy/Dockerfile.api
+    dockerContext: .
+    envVars:
+      - key: PAGECHECK_ENV
+        value: production
+      - key: PAGECHECK_ALLOW_LIVE_FETCH
+        value: "0"
+      - key: PAGECHECK_ALLOW_LIVE_BROWSER
+        value: "0"
+      - key: PAGECHECK_ALLOW_LOCAL_STATIC_ENGINES
+        value: "0"
+      - key: PAGECHECK_PRIVATE_API_KEY
+        generateValue: true
+      - key: PAGECHECK_DATABASE_URL
+        sync: false  # Fill in Render dashboard; Neon credentials never enter Git.
+
+  - type: web
+    name: pagecheck-ui
+    runtime: docker
+    region: ohio
+    plan: 0.5c-512mb
+    dockerfilePath: ./deploy/Dockerfile.ui
+    dockerContext: .
+    healthCheckPath: /_stcore/health
+    envVars:
+      - key: PAGECHECK_ENV
+        value: production
+      - key: PAGECHECK_STORAGE_BACKEND
+        value: postgres_temporary
+      - key: PAGECHECK_API_HOSTPORT
+        fromService:
+          name: pagecheck-api
+          type: pserv
+          property: hostport
+      - key: PAGECHECK_PRIVATE_API_KEY
+        fromService:
+          name: pagecheck-api
+          type: pserv
+          envVarKey: PAGECHECK_PRIVATE_API_KEY
+
+  - type: cron
+    name: pagecheck-expired-audit-cleanup
+    runtime: docker
+    region: ohio
+    plan: 0.5c-512mb
+    schedule: "0 * * * *"   # Once per hour, UTC.
+    dockerfilePath: ./deploy/Dockerfile.ui
+    dockerContext: .
+    dockerCommand: /app/deploy/run_cleanup.sh
+    envVars:
+      - key: PAGECHECK_ENV
+        value: production
+      - key: PAGECHECK_DATABASE_URL
+        sync: false  # Same Neon URL as the private API; configure separately.
