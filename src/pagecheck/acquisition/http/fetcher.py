@@ -5,7 +5,7 @@ from urllib.parse import urljoin
 import httpcore
 import httpx
 
-from pagecheck.acquisition.http.safe_transport import PublicHTTPTransport
+from pagecheck.acquisition.http.safe_transport import public_transport_for_audit
 from pagecheck.common.security.url_validation import validate_public_url
 
 MAX_BODY_BYTES = 2_000_000
@@ -31,7 +31,7 @@ def fetch_html(url: str, *, transport: httpx.BaseTransport | None = None) -> Fet
     redirects = []
     try:
         with httpx.Client(
-            transport=transport if transport is not None else PublicHTTPTransport(),
+            transport=transport if transport is not None else public_transport_for_audit(),
             follow_redirects=False,
             timeout=httpx.Timeout(8.0),
             trust_env=False,

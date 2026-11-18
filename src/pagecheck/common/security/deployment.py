@@ -19,7 +19,8 @@ def production_scan_configured() -> bool:
     return (
         not is_local_development()
         and os.environ.get("PAGECHECK_PUBLIC_AUDITS_ENABLED") == "1"
-        and os.environ.get("PAGECHECK_EGRESS_ISOLATED") == "1"
+        and (os.environ.get("PAGECHECK_EGRESS_ISOLATED") == "1"
+             or os.environ.get("PAGECHECK_AUDIT_WORKER_ISOLATED") == "1")
         and os.environ.get("PAGECHECK_ALLOW_LIVE_FETCH") == "1"
         and os.environ.get("PAGECHECK_ALLOW_LIVE_BROWSER") == "1"
         and len(os.environ.get("PAGECHECK_PRIVATE_API_KEY", "")) >= 32

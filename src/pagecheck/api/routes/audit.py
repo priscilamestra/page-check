@@ -17,6 +17,9 @@ from pagecheck.common.security.admission import (AuditAdmissionError,
 from pagecheck.common.security.deployment import (is_local_development,
                                                    live_browser_enabled, live_fetch_enabled)
 from pagecheck.common.security.private_api import require_private_service
+from pagecheck.common.security.isolated_audit import (
+    run_isolated_audit, verify_worker_python_exec, AuditIsolationUnavailable,
+)
 from pagecheck.common.security.url_validation import URLValidationError, validate_public_url
 
 router = APIRouter(prefix="/v1/audits", tags=["audit"])
@@ -61,7 +64,12 @@ def audit_page(payload: PageAuditRequest, request: Request) -> dict:
             return _execute_audit(payload, request)
         # A single Uvicorn worker is required by the Stage33 deployment policy.
         with production_audit_admission.enter():
+            if os.environ.get("PAGECHECK_AUDIT_WORKER_ISOLATED") == "1":
+                validate_public_url(payload.url)
+                return run_isolated_audit(payload)
             return _execute_audit(payload, request)
+    except AuditIsolationUnavailable as exc:
+        raise HTTPException(503, "Isolated public auditor is not available.") from exc
     except AuditAdmissionError as exc:
         raise HTTPException(429, str(exc), headers={"Retry-After": "60"}) from exc
     except (UnsafeDestination, URLValidationError) as exc:
@@ -70,3 +78,23 @@ def audit_page(payload: PageAuditRequest, request: Request) -> dict:
         raise HTTPException(502, str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@router.post("/isolation-check")
+def check_worker_isolation(request: Request) -> dict:
+    """Authenticated hosted check: verify seccomp in both C and execve'd Python."""
+    if is_local_development():
+        raise HTTPException(404, "Production-only validation")
+    require_private_service(request)
+    launcher = os.environ.get("PAGECHECK_BROWSER_SECCOMP_LAUNCHER", "")
+    try:
+        verify_worker_python_exec(launcher)
+    except AuditIsolationUnavailable as exc:
+        raise HTTPException(503, "Kernel worker isolation verification failed") from exc
+    return {
+        "status": "ok",
+        "worker_ipv4_blocked": True,
+        "worker_ipv6_blocked": True,
+        "broker_required": True,
+        "container_wide_egress_firewall": False,
+    }

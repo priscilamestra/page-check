@@ -95,3 +95,14 @@ class PublicHTTPTransport(httpx.BaseTransport):
 
     def close(self) -> None:
         self.pool.close()
+
+
+def public_transport_for_audit() -> httpx.BaseTransport:
+    """Route isolated workers through the trusted AF_UNIX fetch broker."""
+    import os
+
+    broker_socket = os.environ.get("PAGECHECK_PUBLIC_FETCH_BROKER_SOCKET", "")
+    if broker_socket:
+        from pagecheck.common.security.public_fetch_broker import PublicBrokerTransport
+        return PublicBrokerTransport(broker_socket)
+    return PublicHTTPTransport()

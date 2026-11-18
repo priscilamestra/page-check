@@ -14,7 +14,7 @@ from urllib.parse import urljoin
 import httpx
 from playwright.sync_api import Browser, Route
 
-from pagecheck.acquisition.http.safe_transport import PublicHTTPTransport
+from pagecheck.acquisition.http.safe_transport import public_transport_for_audit
 from pagecheck.common.security.url_validation import validate_public_url
 from pagecheck.acquisition.browser.visual_probe import inspect_rendered_page
 
@@ -55,7 +55,7 @@ def fetch_public_resource(
     current = validate_public_url(url)
     try:
         with httpx.Client(
-            transport=transport if transport is not None else PublicHTTPTransport(),
+            transport=transport if transport is not None else public_transport_for_audit(),
             trust_env=False,
             follow_redirects=False,
             timeout=httpx.Timeout(6.0),
