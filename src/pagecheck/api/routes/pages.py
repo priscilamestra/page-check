@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 
-from pagecheck.common.security.deployment import live_fetch_enabled
+from pagecheck.common.security.deployment import is_local_development, live_fetch_enabled
 
 from pagecheck.acquisition.http.fetcher import FetchError
 from pagecheck.acquisition.http.safe_transport import UnsafeDestination
@@ -16,7 +16,10 @@ router = APIRouter(prefix="/v1/pages", tags=["pages"])
 @router.post("/inspect", response_model=PageInspectionResponse)
 def inspect_public_page(payload: PageInspectionRequest) -> dict:
     """Inspeção síncrona local de HTML sem avaliação de SEO/UX."""
-    # O projeto ainda não tem autenticação, quotas e revisão de segurança para deploy público.
+    # Legacy inspection endpoint: never expose it on an internet-facing API.
+    # Production audits must use the authenticated, rate-limited /v1/audits/page.
+    if not is_local_development():
+        raise HTTPException(503, "This legacy inspection endpoint is local-only.")
     if not live_fetch_enabled():
         raise HTTPException(
             status_code=503,

@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException
 
-from pagecheck.common.security.deployment import live_fetch_enabled
+from pagecheck.common.security.deployment import is_local_development, live_fetch_enabled
 
 from pagecheck.acquisition.http.fetcher import FetchError
 from pagecheck.acquisition.http.safe_transport import UnsafeDestination
@@ -16,7 +16,10 @@ router = APIRouter(prefix="/v1/audits/seo", tags=["seo"])
 @router.post("", response_model=SeoAuditResponse)
 def audit_public_page_seo(payload: SeoAuditRequest) -> dict:
     """Auditoria SEO local por regras determinísticas, sem LLM."""
-    # Ainda não habilitar em deploy público: faltam auth, quotas e revisão de SSRF.
+    # Production audits must use the authenticated, rate-limited /v1/audits/page.
+    # Do not allow this older endpoint to bypass production admission controls.
+    if not is_local_development():
+        raise HTTPException(503, "This legacy SEO endpoint is local-only.")
     if not live_fetch_enabled():
         raise HTTPException(
             status_code=503,
