@@ -20,6 +20,7 @@ from pagecheck.ui.components.url_explorer import (
     area_summary,
     campaign_parameters,
     check_rows,
+    destination_inventory_count,
     filter_rows,
     group_check_rows,
 )
@@ -126,10 +127,15 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
         st.markdown("#### URL & campaign parameters")
         params = campaign_parameters(report)
         rows = check_rows(report, describe=check_copy)
+        destination_count = destination_inventory_count(rows)
         pcols = st.columns(3)
         pcols[0].metric("Query parameters", params["total"])
         pcols[1].metric("UTM parameters", params["utm"])
-        pcols[2].metric("Check records", len(rows))
+        pcols[2].metric("Link destinations", destination_count)
+        st.caption(
+            f"{len(rows)} diagnostic check records. Unvisited destinations are kept as "
+            "one inventory coverage limit, not counted as individual failures."
+        )
         if params["total"]:
             with st.expander(f"View {params['total']} URL parameter(s)"):
                 st.dataframe(params["parameters"], hide_index=True,
@@ -215,6 +221,12 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
                         )
                         detail = members[selected_member]
                     st.markdown(f"**{detail['title']}** · {detail['label']}")
+                    if detail["inventory_items"]:
+                        st.caption(
+                            f"{detail['inventory_items']} destinations were recorded. Their availability was "
+                            "not tested, so this is one coverage limitation—not "
+                            f"{detail['inventory_items']} broken or failed links."
+                        )
                     if detail["recommendation"]:
                         label = "Coverage limit" if detail["status"] == "not_verified" else "Next step"
                         st.write(f"**{label}:** {detail['recommendation']}")

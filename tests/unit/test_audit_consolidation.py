@@ -25,6 +25,8 @@ def _seo(*, status="failed", score=75.0):
         ],
         "score": score, "coverage": 1.0, "partial_score": False,
         "ruleset_version": "seo-1.0.0",
+        "score_breakdown": {"points_earned": 9.5, "points_possible": 12,
+                            "deductions": []},
     }
 
 
@@ -72,6 +74,7 @@ def test_score_sources_are_separate():
     assert report["scores"]["lighthouse"]["seo"] == 91
     assert report["scores"]["overall"] is None
     assert report["scores"]["internal"]["seo"]["ruleset_version"] == "seo-1.0.0"
+    assert report["scores"]["internal"]["seo"]["breakdown"]["points_possible"] == 12
 
 
 def test_conversion_not_verified_not_counted_as_passed():
@@ -143,7 +146,7 @@ def test_strict_input_contract_rejects_malformed_source():
         _base(visuals=[{"findings": []}])
     with pytest.raises(ValueError, match="seo.checks"):
         _base(seo={"checks": "not a list"})
-    with pytest.raises(ValueError, match="external.engines"):
+    with pytest.raises(TypeError, match="external.engines"):
         _base(external={"engines": []})
     with pytest.raises(ValueError, match="Viewports"):
         _base(visuals={"tablet": {"findings": []}})

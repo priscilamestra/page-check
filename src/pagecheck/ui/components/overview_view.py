@@ -22,6 +22,7 @@ from pagecheck.ui.components.overview_dashboard import (
 from pagecheck.ui.components.overview_insights import (
     prioritized_unique_findings,
     seo_keyword_groups,
+    seo_score_explanation,
     source_counts,
 )
 from pagecheck.ui.components.report_data import issue_counts
@@ -48,6 +49,7 @@ def render_overview(report: dict[str, Any], *, root: Path, zip_data: bytes | Non
     ), unsafe_allow_html=True)
 
     keyword_groups = seo_keyword_groups(report)
+    score_explanation = seo_score_explanation(report)
     left, right = st.columns(2, gap="medium")
     for column, title, key, empty_copy in (
         (left, "Missing or improve", "missing_or_improve",
@@ -61,10 +63,12 @@ def render_overview(report: dict[str, Any], *, root: Path, zip_data: bytes | Non
             if items:
                 with st.container(horizontal=True):
                     for item in items:
-                        st.badge(item["term"], color="orange" if key == "missing_or_improve" else "gray")
+                        st.badge(item["term"], color="orange" if key == "missing_or_improve" else "red")
                 st.caption(" · ".join(dict.fromkeys(item["reason"] for item in items)))
             else:
                 st.caption(empty_copy)
+            if key == "missing_or_improve" and score_explanation:
+                st.caption(score_explanation)
 
     st.markdown("#### Fix these first")
     priorities = prioritized_unique_findings(report, limit=10)

@@ -8,7 +8,9 @@ from pagecheck.api.app import app
 from pagecheck.api.routes import audit as audit_route
 from pagecheck.application.use_cases.audit_page_html import audit_page_html
 from pagecheck.audits.seo.content_guidance import (
-    _phrase_present, inspect_content_guidance, normalize_keywords,
+    _phrase_present,
+    inspect_content_guidance,
+    normalize_keywords,
 )
 from pagecheck.reporting.english_copy import check_copy
 
@@ -47,6 +49,29 @@ def test_body_only_keyword_is_guidance_not_a_penalty_claim():
     assert check["evidence"]["locations"]["title"] is False
 
 
+def test_prominent_terms_outside_supplied_context_are_review_candidates():
+    html = """<html lang='en'><head><title>Welcome to Python</title></head>
+              <body><h1>Developer resources</h1><p>Python documentation.</p></body></html>"""
+    data = inspect_content_guidance(
+        html, parse_html(html, "https://python.example"), language="en",
+        niche="Software programming", keywords=["python"],
+    )
+    assert [item["term"].casefold() for item in data["relevance_candidates"]] == [
+        "welcome", "developer", "resources",
+    ]
+    assert all("outside the supplied niche" in item["reason"]
+               for item in data["relevance_candidates"])
+
+
+def test_supplied_target_terms_are_never_relevance_candidates():
+    source = "<title>Python programming</title><h1>Python software</h1>"
+    data = inspect_content_guidance(
+        source, parse_html(source, "https://example.com"), language="en",
+        niche="Software programming", keywords=["python"],
+    )
+    assert data["relevance_candidates"] == []
+
+
 def test_word_boundary_avoids_false_positive():
     assert not _phrase_present("sale", "wholesale")
     assert _phrase_present("sale", "sale today")
@@ -74,6 +99,7 @@ def test_preserves_original_technical_seo_score():
                              language="pt", keywords=["automação comercial"], fetch=fake_fetch)
     assert base["scores"]["internal"]["seo"]["score"] == guided["scores"]["internal"]["seo"]["score"]
     assert guided["audit_context"] == {"language": "pt", "keywords": ["automação comercial"]}
+    assert "relevance_candidates" in guided["seo_content_guidance"]
     assert any(c["check_id"].startswith("SEO_TARGET_KEYWORD_") for c in guided["checks"])
     assert guided["status"] == "partial"
 

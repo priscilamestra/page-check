@@ -6,8 +6,15 @@ from copy import deepcopy
 import pytest
 
 from pagecheck.ui.components.overview_insights import (
-    actionable_rows, area_bars_html, coverage_bars_html, missing_evidence_rows,
-    prioritized_findings, seo_keyword_groups, source_counts, count_label,
+    actionable_rows,
+    area_bars_html,
+    count_label,
+    coverage_bars_html,
+    missing_evidence_rows,
+    prioritized_findings,
+    seo_keyword_groups,
+    seo_score_explanation,
+    source_counts,
 )
 
 
@@ -182,15 +189,25 @@ def test_keyword_groups_use_only_recorded_seo_evidence():
          "evidence": {"keyword": "sales ops", "locations": {"visible_copy": False}}},
         {"check_id": "SEO_TARGET_KEYWORD_3", "status": "passed",
          "evidence": {"keyword": "crm", "locations": {"title": True}}},
-        {"check_id": "SEO_NICHE_CONTEXT", "status": "not_verified",
-         "evidence": {"niche": "Revenue operations", "locations": {"title": False}}},
-    ]}
+    ], "scores": {"internal": {"seo": {"breakdown": {
+        "points_earned": 9.5, "points_possible": 12,
+        "deductions": [{"check_id": "SEO_CANONICAL", "points_lost": 1,
+                        "weight": 2}],
+    }}}}, "seo_content_guidance": {"relevance_candidates": [{
+        "term": "Welcome", "reason": "Prominent outside supplied terms",
+    }]}}
     groups = seo_keyword_groups(report)
     assert groups["missing_or_improve"] == [
         {"term": "automation", "reason": "Improve prominence"},
         {"term": "sales ops", "reason": "Missing from page copy"},
+        {"term": "Canonical URL", "reason": "1 of 2 weighted points lost"},
     ]
-    assert groups["review_relevance"][0]["term"] == "Revenue operations"
+    assert groups["review_relevance"] == [
+        {"term": "Welcome", "reason": "Prominent outside supplied terms"},
+    ]
+    assert seo_score_explanation(report) == (
+        "Technical SEO score: 9.5 of 12 eligible weighted points earned."
+    )
 
 
 def test_keyword_groups_do_not_invent_relevance_without_evidence():

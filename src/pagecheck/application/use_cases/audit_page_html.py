@@ -104,7 +104,9 @@ def audit_page_html(url: str, *, niche: str, objective: str,
     report["audit_context"] = {"language": language, "keywords": target_keywords}
     report["seo_content_guidance"] = {
         "language": guidance["language"], "niche": guidance["niche"],
-        "keywords": guidance["keywords"], "limitations": guidance["limitations"],
+        "keywords": guidance["keywords"],
+        "relevance_candidates": guidance["relevance_candidates"],
+        "limitations": guidance["limitations"],
     }
     report["http"] = {"status_code": page.status_code,
                       "redirect_count": len(page.redirects),

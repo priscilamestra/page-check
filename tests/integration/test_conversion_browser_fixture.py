@@ -21,6 +21,19 @@ def test_full_static_pipeline_from_fixture():
     assert any(c["module"] == "forms" for c in report["checks"])
 
 
+def test_unvisited_links_are_one_inventory_limit_not_one_check_each():
+    report = audit_conversion_html(
+        "<a href='/one'>One</a><a href='https://example.org/two'>Two</a>",
+        URL,
+    )
+    coverage = next(c for c in report["checks"]
+                    if c["check_id"] == "NAV_DESTINATION_COVERAGE")
+    assert coverage["status"] == "not_verified"
+    assert coverage["evidence"]["count"] == 2
+    assert len([c for c in report["checks"] if c["module"] == "navigation"]) == 1
+    assert report["counts"]["not_verified"] == 2  # one link inventory + tracking delivery
+
+
 def test_rendered_dom_snapshot_does_not_submit_or_navigate():
     html = FIXTURE.read_text(encoding="utf-8")
     # Exclui URL de script remoto do browser fixture: não é necessário para

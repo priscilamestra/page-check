@@ -50,6 +50,11 @@ def campaign_parameters(report: Mapping[str, Any]) -> dict[str, Any]:
             "has_utm": utm_count > 0}
 
 
+def destination_inventory_count(rows: list[dict[str, Any]]) -> int:
+    return sum(row.get("inventory_items", 0) for row in rows
+               if isinstance(row.get("inventory_items"), int))
+
+
 def check_rows(report: Mapping[str, Any],
                describe: Callable[[dict[str, Any]], tuple[str, str | None]] | None = None
                ) -> list[dict[str, Any]]:
@@ -72,10 +77,15 @@ def check_rows(report: Mapping[str, Any],
         evidence = check.get("evidence") or {}
         if not isinstance(evidence, Mapping):
             evidence = {}
-        element = str(evidence.get("text") or evidence.get("id") or evidence.get("tag") or "")
-        destination = str(evidence.get("resolved_url") or evidence.get("resolved_action")
-                          or evidence.get("href") or evidence.get("action") or "")
-        location = str(evidence.get("selector") or evidence.get("selector_hint")
+        inventory_items = evidence.get("items") if isinstance(evidence.get("items"), list) else []
+        inventory_count = evidence.get("count")
+        if not isinstance(inventory_count, int) or isinstance(inventory_count, bool) or inventory_count < 0:
+            inventory_count = len(inventory_items)
+        example = inventory_items[0] if inventory_items and isinstance(inventory_items[0], Mapping) else evidence
+        element = str(example.get("text") or example.get("id") or example.get("tag") or "")
+        destination = str(example.get("resolved_url") or example.get("resolved_action")
+                          or example.get("href") or example.get("action") or "")
+        location = str(example.get("selector") or example.get("selector_hint")
                        or evidence.get("form_index") or "")
         rows.append({
             "index": index,
@@ -90,6 +100,7 @@ def check_rows(report: Mapping[str, Any],
             "element": element,
             "destination": destination,
             "location": location,
+            "inventory_items": inventory_count,
         })
     return sorted(rows, key=lambda r: (_STATUS_SORT[r["status"]],
                                        CHECK_AREAS.index(r["area"]), r["index"]))

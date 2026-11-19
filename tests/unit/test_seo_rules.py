@@ -34,6 +34,21 @@ def test_missing_title_and_description_have_failing_evidence():
     assert by_id(result, "SEO_DESCRIPTION")["status"] == "failed"
     assert by_id(result, "SEO_TITLE")["evidence"]["observed_value"] is None
     assert result["score"] < 100
+    breakdown = result["score_breakdown"]
+    assert breakdown["points_earned"] < breakdown["points_possible"]
+    assert {row["check_id"] for row in breakdown["deductions"]} >= {
+        "SEO_TITLE", "SEO_DESCRIPTION",
+    }
+
+
+def test_score_breakdown_matches_the_published_score():
+    result = audit_seo(parse("<title>Example</title><h1>One</h1><h1>Two</h1>"))
+    breakdown = result["score_breakdown"]
+    assert result["score"] == round(
+        100 * breakdown["points_earned"] / breakdown["points_possible"], 1
+    )
+    assert any(row["check_id"] == "SEO_H1" and row["points_lost"] == 1.5
+               for row in breakdown["deductions"])
 
 
 def test_missing_h1_is_failure():

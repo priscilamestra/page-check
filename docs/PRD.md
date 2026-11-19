@@ -1,6 +1,6 @@
 # PRD — Page Check
 
-**Versão:** 1.1 | **Atualizado:** 19/11/2026 | **Status:** implementação final em validação; auditoria pública condicionada ao gate Stage 43 | **Repositório:** independente do Stock.
+**Versão:** 1.2 | **Atualizado:** 19/11/2026 | **Status:** versão final validada e publicada no ambiente de produção | **Repositório:** independente do Stock.
 
 ## 1. Resumo
 
@@ -151,3 +151,11 @@ Landing pages podem perder oportunidades por links quebrados, CTAs sem destino, 
 7. Proteções de URL, redirects, recursos de subnavegação e limites confirmadas por testes negativos.
 8. README reproduz o fluxo de instalação/execução, com limitações reais e demonstração.
 9. Detector Impeccable não bloqueia release se a integração ainda não estiver validada: fica P1 condicional registrada.
+
+## 12. Encerramento da correção de interpretação (19/11/2026)
+
+- O card **Technical SEO** mantém a fórmula ponderada existente e agora expõe a origem da nota. No teste real do Python.org, `79/100` corresponde a `9,5 de 12` pontos elegíveis, com as deduções de H1 e canonical mostradas como chips em **Missing or improve**.
+- **Review relevance** usa somente termos proeminentes do title/H1 que ficaram fora do nicho e das palavras-chave informadas. Os chips são candidatos determinísticos para revisão humana, não uma afirmação automática de que o termo prejudica SEO.
+- Links não visitados deixaram de produzir centenas de linhas `not_verified`. Os destinos continuam inventariados, mas aparecem como uma única limitação de cobertura. No teste real: `204` destinos, `17` registros diagnósticos e uma limitação agregada.
+- O worker isolado usa timeout de `110 s` para acomodar CPU do Render gratuito, preservando o limite HTTP de `120 s`, memória de `512 MB`, broker GET validado, bloqueio de sockets diretos e concorrência unitária.
+- Validação: `609` testes automatizados aprovados, smoke test Linux/Chromium em `512 MB`, revisão Impeccable sem achados e auditoria real do Python.org concluída no ambiente publicado.

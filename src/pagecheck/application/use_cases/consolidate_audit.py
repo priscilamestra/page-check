@@ -10,7 +10,9 @@ from typing import Any
 
 from pagecheck.reporting.consolidation.normalize import normalize_check
 from pagecheck.reporting.consolidation.summary import (
-    group_actions, priority_findings, summarize_checks,
+    group_actions,
+    priority_findings,
+    summarize_checks,
 )
 
 ENGINE_NAMES = ("lighthouse", "axe", "impeccable")
@@ -119,7 +121,7 @@ def consolidate_audit(
 
     engine_data = external.get("engines", external) if external is not None else {}
     if not isinstance(engine_data, Mapping):
-        raise ValueError("external.engines deve ser um objeto.")
+        raise TypeError("external.engines deve ser um objeto.")
     lighthouse_scores: dict[str, Any] | None = None
     engine_limitations: dict[str, list[str]] = {}
     for engine in ENGINE_NAMES:
@@ -182,6 +184,7 @@ def consolidate_audit(
             "coverage": seo.get("coverage"),
             "partial_score": seo.get("partial_score"),
             "ruleset_version": seo.get("ruleset_version"),
+            "breakdown": seo.get("score_breakdown"),
         }
 
     return {

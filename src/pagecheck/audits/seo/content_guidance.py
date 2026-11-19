@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections import Counter
 from collections.abc import Sequence
 from typing import Any
 
@@ -14,20 +15,28 @@ from bs4 import BeautifulSoup
 
 LANGUAGES = {"en": "English", "pt": "Portuguese", "es": "Spanish"}
 MAX_KEYWORDS = 8
+STOPWORDS = {
+    "en": {"about", "after", "also", "from", "have", "into", "more", "that", "their",
+           "these", "this", "with", "your", "the", "and", "for", "you"},
+    "pt": {"como", "mais", "para", "pela", "pelo", "sobre", "tambem", "uma", "das",
+           "dos", "que", "com", "seu", "sua"},
+    "es": {"como", "para", "sobre", "tambien", "una", "del", "las", "los", "que",
+           "con", "sus"},
+}
 
 
 def normalize_keywords(keywords: Sequence[str] | None) -> list[str]:
     if keywords is None:
         return []
     if isinstance(keywords, (str, bytes)) or not isinstance(keywords, (list, tuple)):
-        raise ValueError("Keywords must be a list of phrases.")
+        raise TypeError("Keywords must be a list of phrases.")
     if len(keywords) > MAX_KEYWORDS:
         raise ValueError(f"Select up to {MAX_KEYWORDS} keywords.")
     result: list[str] = []
     seen: set[str] = set()
     for item in keywords:
         if not isinstance(item, str):
-            raise ValueError("Keywords must be text.")
+            raise TypeError("Keywords must be text.")
         phrase = " ".join(item.strip().split())
         if not 2 <= len(phrase) <= 60:
             raise ValueError("Each keyword must contain 2–60 characters.")
@@ -49,6 +58,38 @@ def _phrase_present(phrase: str, text: object) -> bool:
     needle = re.escape(_fold(phrase))
     needle = needle.replace(r"\ ", r"\s+")
     return bool(re.search(rf"(?<!\w){needle}(?!\w)", _fold(text)))
+
+
+def _terms(value: object) -> list[tuple[str, str]]:
+    """Return display and comparison forms for meaningful word-like terms."""
+    result = []
+    for match in re.finditer(r"[^\W\d_]{4,}", str(value or ""), re.UNICODE):
+        raw = match.group(0)
+        result.append((raw, _fold(raw)))
+    return result
+
+
+def _relevance_candidates(*, title: str, h1: str, visible_copy: str,
+                          language: str, niche: str,
+                          keywords: Sequence[str]) -> list[dict[str, Any]]:
+    """Flag prominent terms outside the user's supplied SEO context for review."""
+    supplied = {folded for phrase in [niche, *keywords] for _, folded in _terms(phrase)}
+    stopwords = STOPWORDS[language]
+    visible_counts = Counter(folded for _, folded in _terms(visible_copy))
+    candidates: dict[str, dict[str, Any]] = {}
+    for location, text in (("title", title), ("h1", h1)):
+        for raw, folded in _terms(text):
+            if folded in supplied or folded in stopwords or folded in candidates:
+                if folded in candidates:
+                    candidates[folded]["locations"][location] = True
+                continue
+            candidates[folded] = {
+                "term": raw,
+                "locations": {"title": location == "title", "h1": location == "h1"},
+                "visible_occurrences": visible_counts[folded],
+                "reason": "Prominent in the title or H1 but outside the supplied niche and target terms.",
+            }
+    return list(candidates.values())[:5]
 
 
 def _check(rule: str, status: str, title: str, observed: dict[str, Any],
@@ -127,7 +168,11 @@ def inspect_content_guidance(html: str, extracted: dict[str, Any], *,
         {"niche": niche, "locations": niche_locations, "selected_language": language},
         "The niche may be described with synonyms; use target keywords and review the page manually."
         if not niche_observed else ""))
+    relevance_candidates = _relevance_candidates(
+        title=title, h1=h1, visible_copy=visible_copy, language=language,
+        niche=niche, keywords=phrases,
+    )
     return {"language": language, "niche": niche, "keywords": phrases,
-            "checks": checks,
+            "checks": checks, "relevance_candidates": relevance_candidates,
             "limitations": ["Context checks rely on exact words or phrases with accent-insensitive matching.",
                             "No external keyword research, search volume, ranking, or semantic AI analysis was performed."]}

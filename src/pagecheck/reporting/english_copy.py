@@ -64,6 +64,12 @@ def check_copy(check: Mapping) -> tuple[str, str]:
                 "Review the redirect and your attribution setup; a dropped UTM does not automatically prove lost tracking."
                 if status == "warning" else "")
     if code.startswith("NAV_"):
+        if code == "NAV_DESTINATION_COVERAGE":
+            count = evidence.get("count")
+            return (
+                f"{count} link destinations inventoried; availability not tested",
+                "The live audit does not crawl every destination. This is one coverage limit, not one failure per link.",
+            )
         if "BUTTON_CTA" in code:
             return ("CTA action not executed", "Test the CTA in an authorized browser session; no form was submitted.")
         href = str(evidence.get("href") or "")

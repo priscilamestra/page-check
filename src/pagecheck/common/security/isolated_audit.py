@@ -66,7 +66,7 @@ def verify_worker_python_exec(launcher: str) -> None:
         raise AuditIsolationUnavailable("Python worker still has direct network access")
 
 
-def run_isolated_audit(payload: Any, *, timeout_seconds: int = 95) -> dict:
+def run_isolated_audit(payload: Any, *, timeout_seconds: int = 110) -> dict:
     launcher = os.environ.get("PAGECHECK_BROWSER_SECCOMP_LAUNCHER", "").strip()
     verify_worker_python_exec(launcher)
     with tempfile.TemporaryDirectory(prefix="pc-audit-") as folder:

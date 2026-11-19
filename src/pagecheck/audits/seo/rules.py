@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from itertools import pairwise
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -137,7 +138,7 @@ def audit_seo(extracted: Mapping[str, Any], *, objective: str = "leads") -> dict
                 title="Ordem dos headings", recommendation="",
             ))
         else:
-            jumps = [(a, b) for a, b in zip(levels, levels[1:]) if b > a + 1]
+            jumps = [(a, b) for a, b in pairwise(levels) if b > a + 1]
             checks.append(_check(
                 "SEO_HEADING_ORDER", "warning" if jumps else "passed", url=url,
                 observed={"levels": levels, "jumps": jumps},
@@ -179,7 +180,7 @@ def audit_seo(extracted: Mapping[str, Any], *, objective: str = "leads") -> dict
         checks.append(_unavailable("SEO_NOINDEX", url, "Verificar meta robots"))
     else:
         robots = str(extracted.get("meta_robots") or "")
-        has_noindex = bool(re.search(r"(?:^|[,\s])noindex(?:$|[,\s])", robots, re.I))
+        has_noindex = bool(re.search(r"(?:^|[,\s])noindex(?:$|[,\s])", robots, re.IGNORECASE))
         checks.append(_check(
             "SEO_NOINDEX", "failed" if has_noindex else "passed", url=url,
             observed=robots or None, title="Diretiva HTML noindex",
@@ -216,6 +217,18 @@ def audit_seo(extracted: Mapping[str, Any], *, objective: str = "leads") -> dict
     denominator = sum(c["weight"] for c in executed)
     factor = {"passed": 1.0, "warning": 0.5, "failed": 0.0}
     weighted_points = sum(c["weight"] * factor[c["status"]] for c in executed)
+    deductions = []
+    for check in executed:
+        earned = check["weight"] * factor[check["status"]]
+        lost = check["weight"] - earned
+        if lost:
+            deductions.append({
+                "check_id": check["check_id"],
+                "status": check["status"],
+                "weight": check["weight"],
+                "points_earned": earned,
+                "points_lost": lost,
+            })
     score = round(100 * weighted_points / denominator, 1) if denominator else None
     coverage = round(len(executed) / len(applicable), 3) if applicable else 1.0
 
@@ -226,6 +239,11 @@ def audit_seo(extracted: Mapping[str, Any], *, objective: str = "leads") -> dict
         "score": score,
         "coverage": coverage,
         "partial_score": score is not None and coverage < 0.70,
+        "score_breakdown": {
+            "points_earned": weighted_points,
+            "points_possible": denominator,
+            "deductions": deductions,
+        },
         "checks_executed": len(executed),
         "checks_applicable": len(applicable),
         "checks": checks,

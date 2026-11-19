@@ -1,10 +1,15 @@
 """Fast UX contract checks for the compact URL & parameters exploration."""
 from copy import deepcopy
 
-from pagecheck.ui.components.url_explorer import (
-    area_summary, campaign_parameters, check_rows, filter_rows, group_check_rows,
-)
 from pagecheck.ui.components.coverage_composition import source_composition_html
+from pagecheck.ui.components.url_explorer import (
+    area_summary,
+    campaign_parameters,
+    check_rows,
+    destination_inventory_count,
+    filter_rows,
+    group_check_rows,
+)
 
 
 def sample():
@@ -121,6 +126,21 @@ def test_element_destination_and_location_are_exposed_from_recorded_evidence():
     row = check_rows(report)[0]
     assert (row["element"], row["destination"], row["location"]) == (
         "Buy", "https://example.com/buy", "main > a:nth-of-type(1)")
+
+
+def test_aggregated_link_inventory_keeps_count_and_example():
+    report = {"checks": [{
+        "module": "navigation", "status": "not_verified",
+        "check_id": "NAV_DESTINATION_COVERAGE",
+        "evidence": {"count": 204, "items": [
+            {"text": "Docs", "resolved_url": "https://example.com/docs",
+             "selector": "nav > a:nth-of-type(1)"},
+        ]},
+    }]}
+    rows = check_rows(report)
+    assert destination_inventory_count(rows) == 204
+    assert rows[0]["destination"] == "https://example.com/docs"
+    assert rows[0]["inventory_items"] == 204
 
 
 def test_one_composition_bar_has_actual_total_and_all_statuses():
