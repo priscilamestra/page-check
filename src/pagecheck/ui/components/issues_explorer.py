@@ -44,6 +44,9 @@ def finding_rows(
         output.append({
             "index": index, "title": str(title or "Finding"),
             "recommendation": str(action or ""),
+            "description": str(item.get("description") or ""),
+            "target_url": str(item.get("target_url") or ""),
+            "viewport": str(item.get("viewport") or ""),
             "area": str(item.get("module") or "other").lower(),
             "team": team, "status": status, "result": RESULT_LABEL[status],
             "severity": severity, "severity_label": severity.title(),
@@ -107,19 +110,27 @@ def findings_table(rows: list[dict[str, Any]]) -> list[dict[str, str]]:
 _EVIDENCE_KEYS = (
     ("page_url", "Page URL"), ("url", "URL"),
     ("target_url", "Target URL"), ("href", "Link destination"),
+    ("resolved_url", "Resolved destination"),
+    ("action", "Form action"), ("resolved_action", "Resolved form action"),
     ("destination", "Destination"), ("src", "Image source"),
     ("image_url", "Image URL"), ("selector", "Element selector"),
+    ("selector_hint", "Selector hint"),
     ("dom_path", "DOM location"), ("xpath", "Element location"),
     ("element_html", "Element HTML"), ("outer_html", "Element HTML"),
     ("tag_name", "HTML tag"), ("tag", "HTML tag"),
     ("text", "Element text"), ("link_text", "Link text"),
-    ("attribute", "Attribute"), ("actual", "Observed value"),
+    ("id", "Element ID"), ("index", "Element index"),
+    ("form_index", "Form index"), ("file", "Source file"), ("line", "Source line"),
+    ("rule_id", "Rule ID"), ("attribute", "Attribute"),
+    ("observed_value", "Observed value"), ("actual", "Observed value"),
     ("actual_value", "Observed value"), ("observed", "Observed value"),
     ("value", "Recorded value"), ("expected", "Expected value"),
     ("expected_value", "Expected value"),
     ("status_code", "HTTP status"), ("http_status", "HTTP status"),
     ("reason", "Reason"), ("message", "Diagnostic detail"),
-    ("snippet", "HTML excerpt"),
+    ("snippet", "HTML excerpt"), ("locations", "Observed locations"),
+    ("selectors", "Affected selectors"), ("unlabeled_fields", "Unlabeled fields"),
+    ("missing_alt_sources", "Images missing alt"),
 )
 
 
@@ -145,9 +156,23 @@ def finding_evidence_summary(evidence: object, *, limit: int = 6) -> list[tuple[
             value = source.get(key)
             if value is None or isinstance(value, bool):
                 continue
-            if not isinstance(value, (str, int, float)):
+            if isinstance(value, Mapping):
+                string_value = ", ".join(
+                    f"{name}: {'yes' if state else 'no'}"
+                    for name, state in value.items()
+                    if isinstance(name, str) and isinstance(state, bool)
+                )
+            elif isinstance(value, list):
+                string_value = ", ".join(
+                    " > ".join(str(part) for part in item) if isinstance(item, list)
+                    else str(item)
+                    for item in value[:10]
+                    if isinstance(item, (str, int, float, list))
+                )
+            elif isinstance(value, (str, int, float)):
+                string_value = " ".join(str(value).split())
+            else:
                 continue
-            string_value = " ".join(str(value).split())
             if not string_value or string_value in seen:
                 continue
             seen.add(string_value)

@@ -111,6 +111,34 @@ def source_counts(report: Mapping[str, Any]) -> dict[str, int]:
     return result
 
 
+def seo_keyword_groups(report: Mapping[str, Any]) -> dict[str, list[dict[str, str]]]:
+    """Use only deterministic SEO guidance already recorded in the report."""
+    groups: dict[str, list[dict[str, str]]] = {"missing_or_improve": [],
+                                                "review_relevance": []}
+    for check in report.get("checks") or []:
+        if not isinstance(check, Mapping):
+            continue
+        check_id = str(check.get("check_id") or check.get("id") or "")
+        evidence = _mapping(check.get("evidence"))
+        if check_id.startswith("SEO_TARGET_KEYWORD_") and check.get("status") == "warning":
+            keyword = evidence.get("keyword")
+            locations = _mapping(evidence.get("locations"))
+            if isinstance(keyword, str) and keyword.strip():
+                groups["missing_or_improve"].append({
+                    "term": keyword.strip(),
+                    "reason": ("Improve prominence" if locations.get("visible_copy") is True
+                               else "Missing from page copy"),
+                })
+        elif check_id == "SEO_NICHE_CONTEXT" and check.get("status") == "not_verified":
+            niche = evidence.get("niche")
+            if isinstance(niche, str) and niche.strip():
+                groups["review_relevance"].append({
+                    "term": niche.strip(),
+                    "reason": "Exact niche phrase not observed; synonyms may still be relevant",
+                })
+    return groups
+
+
 def count_label(value: int, singular: str, plural: str | None = None) -> str:
     return f"{value} {singular if value == 1 else (plural or singular + 's')}"
 

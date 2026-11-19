@@ -60,7 +60,7 @@ def test_long_page_captures_only_safe_initial_viewports(monkeypatch, tmp_path):
         assert (tmp_path / viewport / "initial_viewport.png").is_file()
         assert "without annotations" in entry["limitations"][0]
         assert page.screenshot_args[0]["full_page"] is False
-    assert all(not opts["java_script_enabled"] for opts in browser.options)
+    assert all(opts["java_script_enabled"] for opts in browser.options)
 
 
 def test_fallback_does_not_mark_visual_checks_completed(monkeypatch, tmp_path):

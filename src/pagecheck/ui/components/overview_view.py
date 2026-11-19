@@ -15,10 +15,14 @@ import streamlit as st
 from pagecheck.reporting.english_copy import check_copy
 from pagecheck.ui.components.coverage_details import source_rows
 from pagecheck.ui.components.overview_dashboard import (
-    OVERVIEW_STYLES, findings_html, metric_cards_html,
+    OVERVIEW_STYLES,
+    findings_html,
+    metric_cards_html,
 )
 from pagecheck.ui.components.overview_insights import (
-    prioritized_unique_findings, source_counts,
+    prioritized_unique_findings,
+    seo_keyword_groups,
+    source_counts,
 )
 from pagecheck.ui.components.report_data import issue_counts
 
@@ -43,6 +47,25 @@ def render_overview(report: dict[str, Any], *, root: Path, zip_data: bytes | Non
         not_verified=coverage["not_verified"],
     ), unsafe_allow_html=True)
 
+    keyword_groups = seo_keyword_groups(report)
+    left, right = st.columns(2, gap="medium")
+    for column, title, key, empty_copy in (
+        (left, "Missing or improve", "missing_or_improve",
+         "No target keyword was flagged by the checks that ran."),
+        (right, "Review relevance", "review_relevance",
+         "No relevance review was supported by the recorded evidence."),
+    ):
+        with column.container(border=True, height="stretch"):
+            st.markdown(f"**{title}**")
+            items = keyword_groups[key]
+            if items:
+                with st.container(horizontal=True):
+                    for item in items:
+                        st.badge(item["term"], color="orange" if key == "missing_or_improve" else "gray")
+                st.caption(" · ".join(dict.fromkeys(item["reason"] for item in items)))
+            else:
+                st.caption(empty_copy)
+
     st.markdown("#### Fix these first")
     priorities = prioritized_unique_findings(report, limit=10)
     if priorities:
@@ -64,5 +87,6 @@ def render_overview(report: dict[str, Any], *, root: Path, zip_data: bytes | Non
             [{"Source": row["title"], "Result": row["status_label"],
               "Limitation": row["reason"] or "—"}
              for row in source_rows(report)],
-            hide_index=True, use_container_width=True, height=292,
+            hide_index=True, width="stretch", height=292,
+            alt="Audit source coverage and limitations",
         )

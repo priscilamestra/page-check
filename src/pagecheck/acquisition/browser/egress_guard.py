@@ -34,7 +34,11 @@ def launch_guarded_chromium(chromium: Any) -> Any:
     launch_options: dict[str, Any] = {
         "headless": True,
         "proxy": {"server": _BLOCKED_PROXY},
-        "args": ["--disable-background-networking"],
+        "args": [
+            "--disable-background-networking",
+            "--disable-quic",
+            "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+        ],
     }
     launcher = os.environ.get("PAGECHECK_BROWSER_SECCOMP_LAUNCHER", "").strip()
     if not launcher:

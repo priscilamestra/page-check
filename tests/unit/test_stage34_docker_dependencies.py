@@ -20,3 +20,18 @@ def test_docker_build_checks_api_imports_and_uses_current_lock():
     assert "from pagecheck.api.app import app" in api
     assert "from playwright.sync_api import sync_playwright" in api
     assert "API_RUNTIME_IMPORTS_OK" in api
+
+
+def test_api_image_packages_only_the_safe_engine_assets():
+    api = (ROOT / "deploy" / "Dockerfile.api").read_text(encoding="utf-8")
+    assert "axe-core/axe.min.js" in api
+    assert "@impeccable/cli-linux-x64/bin/impeccable" in api
+    assert "/app/node_modules/.bin/impeccable" in api
+    assert "node_modules/lighthouse" not in api
+
+
+def test_isolated_worker_runs_static_engines_inside_the_network_guard():
+    worker = (ROOT / "src/pagecheck/common/security/isolated_audit_worker.py").read_text(
+        encoding="utf-8"
+    )
+    assert "external_collector=collect_static_engines" in worker

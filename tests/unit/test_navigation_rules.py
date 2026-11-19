@@ -18,6 +18,8 @@ def test_external_link_is_not_verified():
     checks = inspect_navigation('<a href="https://example.org">Oferta</a>', URL)
     assert checks[0]["status"] == "not_verified"
     assert checks[0]["evidence"]["resolved_url"] == "https://example.org"
+    assert checks[0]["evidence"]["selector"] == "a:nth-of-type(1)"
+    assert checks[0]["evidence"]["element_html"] == '<a href="https://example.org">Oferta</a>'
 
 
 def test_empty_link_is_warning_not_broken_remote():

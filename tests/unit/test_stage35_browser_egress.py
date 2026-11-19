@@ -22,6 +22,8 @@ def test_browser_is_launched_with_nonlistening_loopback_proxy():
     assert fake.kwargs["headless"] is True
     assert fake.kwargs["proxy"]["server"] == "http://127.0.0.1:9"
     assert "--disable-background-networking" in fake.kwargs["args"]
+    assert "--disable-quic" in fake.kwargs["args"]
+    assert "--force-webrtc-ip-handling-policy=disable_non_proxied_udp" in fake.kwargs["args"]
 
 
 def test_collector_uses_browser_egress_guard_by_default():

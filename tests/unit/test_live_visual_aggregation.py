@@ -32,7 +32,7 @@ def valid_visual():
             'owner': 'Frontend', 'box': {'x': 10, 'y': 20, 'width': 100, 'height': 60},
         }],
         'screenshots': {'annotated': 'artifacts/page_audits/test/mobile/after_scroll_annotated.png'},
-        'limitations': ['JavaScript is disabled.'],
+        'limitations': ['Interactive actions are not executed.'],
     }
 
 
@@ -44,7 +44,7 @@ def test_html_fetch_once_and_visual_capture_receives_final_url():
     def capture(url):
         calls.append(('browser', url))
         return {'visuals': {'mobile': valid_visual()}, 'errors': {'desktop': 'offline'},
-                'mode': 'guarded_static_no_javascript'}
+                'mode': 'guarded_javascript_get_only'}
     report = audit_page_html('https://example.com/?utm_source=test', niche='Retail',
                              objective='sales', fetch=fetch, visual_collector=capture)
     assert calls == [('html', 'https://example.com/?utm_source=test'),
@@ -86,6 +86,8 @@ class FakePage:
         return SimpleNamespace(ok=self.response_ok)
     def evaluate(self, code):
         return self.document_height
+    def wait_for_timeout(self, milliseconds):
+        assert milliseconds == 750
 
 
 class FakeContext:
@@ -114,14 +116,15 @@ class FakeBrowser:
         return context
 
 
-def test_guarded_visual_collector_uses_two_contexts_and_no_javascript(monkeypatch, tmp_path):
+def test_guarded_visual_collector_uses_two_javascript_contexts(monkeypatch, tmp_path):
     browser = FakeBrowser([FakePage(), FakePage()])
     monkeypatch.setattr(collector, 'audit_visual_viewport',
                         lambda page, **kw: valid_visual())
     result = collector.capture_with_browser(browser, url='https://example.com', output_dir=tmp_path)
     assert result['status'] == 'captured'
     assert set(result['visuals']) == {'desktop', 'mobile'}
-    assert all(options['java_script_enabled'] is False and
+    assert result['mode'] == 'guarded_javascript_get_only'
+    assert all(options['java_script_enabled'] is True and
                options['service_workers'] == 'block' and
                options['accept_downloads'] is False
                for options in browser.options)

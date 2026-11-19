@@ -1,6 +1,6 @@
 # PRD — Page Check
 
-**Versão:** 1.0 | **Data:** 11/11/2026 | **Status:** PRD aprovado; bootstrap local criado; auditorias ainda não implementadas | **Repositório:** novo e independente do Stock.
+**Versão:** 1.1 | **Atualizado:** 19/11/2026 | **Status:** implementação final em validação; auditoria pública condicionada ao gate Stage 43 | **Repositório:** independente do Stock.
 
 ## 1. Resumo
 
@@ -39,13 +39,13 @@ Landing pages podem perder oportunidades por links quebrados, CTAs sem destino, 
 5. Executar os módulos independentes; opcionalmente executar Lighthouse, axe-core e detector Impeccable via adapters isolados.
 6. Normalizar todos os achados em um contrato único; calcular status, score e cobertura por módulo.
 7. Desenhar anotações nas capturas (Pillow) e montar relatório compacto.
-8. Persistir resultados/histórico no SQLite e evidências como arquivos.
+8. Em desenvolvimento, persistir no SQLite; em produção, permitir somente recuperação privada temporária por token opaco por até 24 horas.
 9. Exportar HTML + imagens (ZIP), CSV/JSON (resultados tabulares).
 
 ### 4.3 Interface MVP
 - **Auditar página:** formulário 3 campos, botão Auditar, aviso de limites.
 - **Resultados:** resumo visual com status/score/cobertura, screenshot desktop/mobile anotado, lista curta de problemas por severidade, filtro por equipe e detalhes expandidos por achado.
-- **Histórico:** auditorias locais anteriores com link para reabrir; comparação temporal é evolução incremental após salvar resultados corretamente.
+- **Recuperação:** nenhum histórico público. Em produção, o navegador guarda somente um token opaco para restaurar a última auditoria por até 24 horas.
 
 ## 5. Requisitos funcionais
 
@@ -63,7 +63,7 @@ Landing pages podem perder oportunidades por links quebrados, CTAs sem destino, 
 | FR-10 | P0 | Integrar axe-core | Retornar violações e status não verificado se ferramenta falhar |
 | FR-11 | P0 | Integrar Lighthouse local | Exibir scores originais separados dos próprios e informar ambiente de execução |
 | FR-12 | P0 | Consolidar relatório | Achados por área/status/severidade/equipe, com evidência clicável e anotações na imagem |
-| FR-13 | P0 | Histórico e exportação | SQLite + evidências PNG + JSON/CSV e relatório HTML acessível via ZIP |
+| FR-13 | P0 | Recuperação e exportação | SQLite local; recuperação privada temporária em produção; PNG + JSON/CSV e relatório HTML via ZIP |
 | FR-14 | P1 condicional | Adapter Impeccable detector | Usar CLI `detect --json` sem LLM, após smoke test no Windows; se indisponível, demais testes prosseguem |
 | FR-15 | P1 | Histórico antes/depois | Comparar dois `audit_id` do mesmo alvo com regras compatíveis |
 | FR-16 | P1 | Comparação de múltiplas URLs | Aplicar mesmo perfil de auditoria e comparar indicadores com Pandas |
@@ -125,9 +125,9 @@ Landing pages podem perder oportunidades por links quebrados, CTAs sem destino, 
 ## 9. Segurança e privacidade
 
 - HTTPS/HTTP apenas; bloquear localhost, loopback, IPs privados, link-local, cloud metadata e DNS/redirects que resolvam para destinos internos, inclusive recursos do navegador, com proteção contra rebinding.
-- Modo de teste local exclusivamente para fixtures explicitamente permitidas durante desenvolvimento e nunca habilitado no deploy público.
+- Produção usa worker sem sockets IPv4/IPv6 diretos e broker AF_UNIX para GETs públicos validados; o `render.yaml` permanece desabilitado até os smoke tests.
 - Limites configuráveis de tempo, bytes, requests, scroll, browser contexts, concorrência e profundidade; não seguir links indiscriminadamente.
-- Não executar downloads perigosos, envios, scripts arbitrários do usuário ou escrita em serviços auditados.
+- Não executar downloads, envios ou scripts fornecidos como entrada pelo usuário. Scripts pertencentes à página podem renderizar sob orçamento GET, sem WebSocket, serviço de background ou socket direto.
 - Redigir dados sensíveis encontrados em URL/relatórios/logs; sanitizar HTML antes de exibir; evitar armazenar cookies e tokens.
 - Respeitar restrições aplicáveis dos sites, robots quando apropriado ao modo de coleta, e documentar limitações de sites que bloqueiem automação.
 

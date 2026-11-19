@@ -1,23 +1,27 @@
 """Readable English reporting UI, with automatic severity and no severity selector."""
 from __future__ import annotations
 
-from pathlib import Path
-from html import escape
-from urllib.parse import urlsplit
-from typing import Any
 from collections import Counter
+from html import escape
+from pathlib import Path
+from typing import Any
+from urllib.parse import urlsplit
 
 import streamlit as st
 
 from pagecheck.reporting.english_copy import check_copy
 from pagecheck.reporting.exports import findings_csv, zip_export
-from pagecheck.ui.components.report_data import OBJECTIVE_LABELS, export_report_json
-from pagecheck.ui.components.overview_view import render_overview
 from pagecheck.ui.components.issues_view import render_issues
+from pagecheck.ui.components.overview_view import render_overview
+from pagecheck.ui.components.report_data import OBJECTIVE_LABELS, export_report_json
 from pagecheck.ui.components.screenshots_view import render_screenshots
 from pagecheck.ui.components.table_sizing import compact_table_height
 from pagecheck.ui.components.url_explorer import (
-    campaign_parameters, check_rows, area_summary, filter_rows,
+    area_summary,
+    campaign_parameters,
+    check_rows,
+    filter_rows,
+    group_check_rows,
 )
 
 # Small, narrowly scoped CSS: no global Streamlit/toolbar overrides.
@@ -129,14 +133,16 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
         if params["total"]:
             with st.expander(f"View {params['total']} URL parameter(s)"):
                 st.dataframe(params["parameters"], hide_index=True,
-                             use_container_width=True, height=min(280, 55 + 36 * params["total"]))
+                             width="stretch", height=min(280, 55 + 36 * params["total"]),
+                             alt="URL query parameters and campaign tags")
 
         st.markdown("#### What the checks found")
         if not rows:
             st.info("No tracking, navigation, or form checks are available for this report.")
         else:
             st.dataframe(area_summary(rows), hide_index=True,
-                         use_container_width=True, height=145)
+                         width="stretch", height=145,
+                         alt="URL, navigation, and form checks by result")
             st.markdown("#### Explore individual checks")
             area_counts = Counter(row["area"] for row in rows)
             areas = ["All"] + sorted(area_counts)
@@ -172,23 +178,56 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
                     ),
                 )
             filtered = filter_rows(rows, area=area, status=status, search="")
-            st.caption(f"Showing {len(filtered)} of {len(rows)} checks.")
+            grouped = group_check_rows(filtered)
+            st.caption(
+                f"Showing {len(filtered)} of {len(rows)} check records in "
+                f"{len(grouped)} diagnostic group(s)."
+            )
             if filtered:
-                table = [{"Area": r["area"].title(), "Check": r["title"][:100],
-                          "Result": r["label"], "Suggested action": r["recommendation"][:140]}
-                         for r in filtered]
-                st.dataframe(table, hide_index=True, use_container_width=True,
-                             height=compact_table_height(len(table), max_height=350))
-                options = {f"{r['index'] + 1} · {r['area'].title()} · {r['title'][:85]}": r
-                           for r in filtered}
-                selected = st.selectbox("Inspect a check", ["Select a check..."] + list(options),
-                                        key="url_checks_detail")
+                table = [{"Area": r["area"].title(), "Finding": r["title"][:100],
+                          "Result": r["label"], "Records": r["occurrences"],
+                          "Example element": r["element"][:80] or "—",
+                          "Example destination": r["destination"][:120] or "—"}
+                         for r in grouped]
+                st.dataframe(table, hide_index=True, width="stretch",
+                             height=compact_table_height(len(table), max_height=350),
+                             alt="Grouped URL, navigation, and form diagnostics")
+                options = {
+                    f"{index} · {r['area'].title()} · {r['title'][:75]}"
+                    f" ({r['occurrences']} record{'s' if r['occurrences'] != 1 else ''})": r
+                    for index, r in enumerate(grouped, 1)
+                }
+                selected = st.selectbox(
+                    "Inspect a diagnostic group", ["Select a group..."] + list(options),
+                    key="url_checks_detail_group",
+                )
                 if selected in options:
-                    detail = options[selected]
+                    group = options[selected]
+                    detail = group
+                    if group["occurrences"] > 1:
+                        members = {
+                            f"{item['index'] + 1} · {item['element'][:55] or item['check_id']}"
+                            f" · {item['destination'][:70] or 'No destination'}": item
+                            for item in group["members"]
+                        }
+                        selected_member = st.selectbox(
+                            "Element in this group", list(members), key="url_checks_detail_member"
+                        )
+                        detail = members[selected_member]
                     st.markdown(f"**{detail['title']}** · {detail['label']}")
                     if detail["recommendation"]:
-                        st.write("**Suggested action:** " + detail["recommendation"])
-                    with st.expander("Technical evidence (advanced)"):
+                        label = "Coverage limit" if detail["status"] == "not_verified" else "Next step"
+                        st.write(f"**{label}:** {detail['recommendation']}")
+                    with st.expander("What was found and where"):
+                        if detail["element"]:
+                            st.markdown("**Element**")
+                            st.text(detail["element"])
+                        if detail["destination"]:
+                            st.markdown("**Destination**")
+                            st.text(detail["destination"])
+                        if detail["location"]:
+                            st.markdown("**DOM location**")
+                            st.code(detail["location"], language="css")
                         st.caption("Source: " + (detail["source"] or "Not specified"))
                         st.json(detail["evidence"], expanded=False)
             else:
@@ -205,7 +244,7 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
         st.download_button(
             "Download full report (HTML + screenshots ZIP)", report_zip,
             file_name="pagecheck_report.zip", mime="application/zip",
-            use_container_width=True,
+            width="stretch",
         )
         st.caption("Includes the HTML report and desktop/mobile captures when available. "
                    "Individual PNG downloads are in Screenshots.")
@@ -215,13 +254,13 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
                 st.download_button(
                     "Download findings (CSV)", findings_csv(report),
                     file_name="pagecheck_findings.csv", mime="text/csv",
-                    use_container_width=True,
+                    width="stretch",
                 )
             with b:
                 st.download_button(
                     "Download data (JSON)", export_report_json(report),
                     file_name="pagecheck_audit.json", mime="application/json",
-                    use_container_width=True,
+                    width="stretch",
                 )
         st.caption("Reports may include page URLs and audit data. "
                    "Files are downloaded to your device.")

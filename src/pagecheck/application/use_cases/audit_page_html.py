@@ -1,20 +1,22 @@
-"""Auditoria HTML observável: coleta ÚNICA para SEO, links, formulários e UTMs.
+"""Auditoria observável: HTML seguro, motores estáticos e captura visual opcional.
 
-Não executa JavaScript, não clica, não faz POST e não testa HTTP de links externos.
+Não clica, não faz POST e não testa HTTP de links externos.
 """
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from pagecheck.acquisition.http.fetcher import FetchedPage, fetch_html
 from pagecheck.acquisition.http.parser import parse_html
 from pagecheck.application.use_cases.audit_conversion_page import audit_conversion_html
 from pagecheck.application.use_cases.consolidate_audit import consolidate_audit
-from pagecheck.audits.seo.rules import audit_seo
 from pagecheck.audits.seo.content_guidance import (
-    LANGUAGES, inspect_content_guidance, normalize_keywords,
+    LANGUAGES,
+    inspect_content_guidance,
+    normalize_keywords,
 )
+from pagecheck.audits.seo.rules import audit_seo
 from pagecheck.audits.tracking.url_journey import inspect_url_journey
 from pagecheck.common.security.url_validation import validate_public_url
 from pagecheck.reporting.english_copy import englishize_report
@@ -58,11 +60,11 @@ def audit_page_html(url: str, *, niche: str, objective: str,
     if visual_collector is not None:
         try:
             visual_capture = visual_collector(page.final_url)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - visual capture is optional evidence.
             visual_capture = {
                 "visuals": {}, "status": "not_verified",
                 "errors": {"browser": f"Browser unavailable ({type(exc).__name__})."},
-                "mode": "guarded_static_no_javascript",
+                "mode": "guarded_javascript_get_only",
             }
     external_result: Mapping[str, Any] | None = None
     if external_collector is not None:
@@ -71,7 +73,7 @@ def audit_page_html(url: str, *, niche: str, objective: str,
             if not isinstance(candidate, Mapping):
                 raise TypeError("External collector must return a mapping.")
             external_result = candidate
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - external engines cannot abort the audit.
             from pagecheck.application.use_cases.external_engines import combine_engines
             external_result = combine_engines({})
             external_result["execution_error"] = type(exc).__name__
@@ -88,9 +90,11 @@ def audit_page_html(url: str, *, niche: str, objective: str,
             "mode": "opt_in_sanitized_static_html",
             "status": external_result.get("status", "not_verified"),
             "limitations": [
-                "External checks analyze a sanitized snapshot from the same safe HTML fetch. "
-                "They do not validate runtime behaviour, real Lighthouse performance, "
-                "or the original page's full visual design."
+                (
+                    "External checks analyze a sanitized snapshot from the same safe HTML fetch. "
+                    "They do not validate runtime behaviour, real Lighthouse performance, "
+                    "or the original page's full visual design."
+                )
             ],
         }
     if visual_capture is not None:

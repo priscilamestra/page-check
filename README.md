@@ -1,14 +1,14 @@
 # Page Check
 
-**Local development project — integrated HTML/SEO, conversion, visual evidence, static external diagnostics, SQLite history and report exports. Not production-ready for public URL scanning.**
+**Deterministic landing-page audit with guarded public scanning, JavaScript screenshots, private 24-hour recovery and portable exports.**
 
-Page Check performs deterministic landing-page checks for technical marketing/GTM teams, without generative AI or paid APIs. It reports what was actually verified. It does not measure Google rankings, real analytics conversions, JavaScript-only interactions, real checkout completion, or full WCAG compliance.
+Page Check performs deterministic landing-page checks for technical marketing/GTM teams, without generative AI or paid APIs. It reports what was actually verified. It does not measure Google rankings, real analytics conversions, completed checkouts or full WCAG compliance.
 
 ## Requirements
 
 - Windows PowerShell or equivalent terminal, Python 3.11+ and `uv`.
 - Playwright Chromium installed for optional browser visual inspection.
-- For opt-in local static external engines, local `axe-core` and Impeccable Node dependencies installed per `docs/STATIC_ENGINES_STAGE18.md`. Lighthouse runs only on a **trusted local fixture**, not arbitrary public URLs.
+- For local engine checks, install the pinned `axe-core` and Impeccable dependencies with `npm ci`. The API image packages only the bounded axe script and Impeccable native detector. Lighthouse runs only on a **trusted local fixture**, not arbitrary public URLs.
 
 Install the project's Python dependencies (`uv sync`) and, where applicable, its browser/Node dependencies as described in the linked stage docs. The project must not auto-install CLI packages in the course of an audit.
 
@@ -47,9 +47,9 @@ Enter a public URL, niche, content language, page goal and target keyword tags, 
 
 - Technical HTML SEO (title, description, headings, canonical, alt text) plus separate content/keyword guidance. A score of 100/100 refers **only to eligible scored technical checks**.
 - URL/UTM journey, structural links/CTAs, form and analytics-tag presence (without visiting unsafe destinations, sending forms, or claiming events reached analytics tools).
-- Optional static desktop/mobile evidence from a guarded browser **without JavaScript**. Oversized pages may provide only first-viewport partial evidence without annotations.
+- Desktop/mobile evidence with JavaScript rendered through a guarded GET-only path. POST, WebSocket, downloads, service workers and direct browser sockets stay blocked. Oversized pages may provide only first-viewport partial evidence.
 - Optional static HTML accessibility checks (axe-core) and design heuristics (Impeccable). Neither is a complete live-site audit.
-- Local SQLite history with re-opening after F5, JSON/CSV/HTML+PNG ZIP export, and a readable per-engine status panel.
+- Local SQLite history in development; production uses one opaque browser token for private PostgreSQL recovery for up to 24 hours. JSON/CSV/HTML+PNG ZIP exports remain available.
 
 `Not verified` means insufficient evidence or a check not performed; it is not a defect. `Needs review` means a human should confirm an observation. Lighthouse on a public URL remains `Not verified`. Check **Overview → Audit sources** and **Screenshots** for recorded reasons when a source did not finish.
 
@@ -70,12 +70,12 @@ Enter a public URL, niche, content language, page goal and target keyword tags, 
 
 ## Security and limitations
 
-**Do not deploy this scanner publicly yet.** `PAGECHECK_ENV=production` intentionally disables live URL scanning and unauthenticated local history routes, even when the local opt-in variables are enabled. That fail-closed behavior protects an incomplete deployment but does not make a functioning public URL-scanning service. See [Stage 20 security gate](docs/STAGE20_POLISH_AND_DEPLOY_GATE.md).
+Production scanning is fail-closed. It requires the Stage 43 seccomp worker, AF_UNIX fetch broker, private service key, request admission limits and explicit deployment flags. The checked-in `render.yaml` keeps those flags disabled until the image and hosted isolation smoke tests pass. See [Stage 43 public audits](docs/STAGE43_RENDER_FREE_PUBLIC_AUDITS.md).
 
 
-- Restricted public-host validation and IP-pinned requests are used in the HTTP layer, but **this is not a hardened public web-scanning service**.
-- The browser is limited to local development and guarded static rendering: no page JavaScript, downloads, service workers, form POSTs or Chrome navigations outside the guarded route policy. Full safe public deployment would require OS-level isolation and further security review.
-- Node detectors analyze sanitized HTML only. Lighthouse launches its own network-capable Chrome and is deliberately excluded from arbitrary public targets.
+- Public-host validation, DNS/IP pinning, bounded GETs and process-level socket denial protect the scanner path. This is process isolation, not a claim of a container-wide firewall.
+- Page JavaScript renders only through intercepted requests. Interactive clicks and form submissions are never executed.
+- axe-core and Impeccable analyze sanitized, bounded HTML in the isolated worker. Lighthouse launches its own network-capable Chrome and remains deliberately excluded from arbitrary public targets.
 - Output may contain URLs, HTML evidence or screenshot metadata. Local history and exported reports should be handled as private project data. `data/local/` and `artifacts/` are excluded from Git.
 - No paid APIs, private-data collection, real lead submissions, behavioral heatmaps, or automatic production deployment.
 
@@ -88,4 +88,4 @@ Enter a public URL, niche, content language, page goal and target keyword tags, 
 - [Visual static-browser integration](docs/UI_STAGE16D.md)
 - [Architecture](docs/ARCHITECTURE.md) · [API contract](docs/API_CONTRACT.md) · [PRD](docs/PRD.md)
 
-**Known remaining work:** verify Impeccable with the actual locally installed CLI and design a sandboxed, rate-limited, privacy-reviewed public scanning architecture before any public deployment. The Stage 19 compact UX and Stage 20 polish are implemented for local testing; see [Stage 20 security gate](docs/STAGE20_POLISH_AND_DEPLOY_GATE.md).
+**Known limitation:** Lighthouse remains `not_verified` for public URLs because its separate Chrome process is not connected to the guarded fetch broker. Hosted release still requires the documented 512 MB and Render isolation smoke tests before enabling public audit flags.

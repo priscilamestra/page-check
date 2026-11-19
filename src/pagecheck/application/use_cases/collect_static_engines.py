@@ -7,6 +7,7 @@ Do not enable this in a public deployment without a dedicated sandbox.
 """
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -15,12 +16,13 @@ from typing import Any
 from bs4 import BeautifulSoup
 
 from pagecheck.application.use_cases.external_engines import combine_engines
+from pagecheck.common.security.url_validation import validate_public_url
+from pagecheck.integrations.axe.adapter import normalize_axe
 from pagecheck.integrations.cli_runner import local_binary, run_local_json_command
 from pagecheck.integrations.engine_result import unavailable
-from pagecheck.integrations.axe.adapter import normalize_axe
-from pagecheck.common.security.url_validation import validate_public_url
 
-ROOT = Path(__file__).resolve().parents[4]
+# Both supported runtimes keep node_modules next to their project virtualenv.
+ROOT = Path(sys.prefix).resolve().parent
 MAX_HTML_BYTES = 1_000_000
 # Static checks only: anything executable, loadable, or layout-specific is
 # stripped before a JS-enabled offline browser is used for axe-core.
@@ -101,7 +103,7 @@ def run_static_axe(safe_html: str, *, root: Path) -> dict[str, Any]:
         )
         result["metrics"]["static_rules"] = list(STATIC_AXE_RULES)
         return result
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - optional diagnostics cannot abort the audit.
         return unavailable("axe", f"Static axe scan unavailable ({type(exc).__name__}).")
 
 
@@ -146,6 +148,6 @@ def collect_static_engines(
             reports[engine] = report if isinstance(report, dict) else unavailable(
                 engine, "Engine returned an unexpected response."
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - isolate each optional engine.
             reports[engine] = unavailable(engine, f"Engine unavailable ({type(exc).__name__}).")
     return combine_engines(reports)

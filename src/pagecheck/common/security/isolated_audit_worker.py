@@ -27,11 +27,13 @@ def main() -> int:
     from pagecheck.api.schemas.audit import PageAuditRequest
     from pagecheck.application.use_cases.audit_page_html import audit_page_html
     from pagecheck.application.use_cases.collect_public_visuals import collect_public_visuals
+    from pagecheck.application.use_cases.collect_static_engines import collect_static_engines
 
     payload = PageAuditRequest.model_validate(json.load(sys.stdin))
     report = audit_page_html(payload.url, niche=payload.niche, objective=payload.objective,
                              language=payload.language, keywords=payload.keywords,
-                             visual_collector=collect_public_visuals)
+                             visual_collector=collect_public_visuals,
+                             external_collector=collect_static_engines)
     json.dump(report, sys.stdout, separators=(",", ":"), ensure_ascii=False)
     return 0
 

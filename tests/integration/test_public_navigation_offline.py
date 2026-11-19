@@ -10,6 +10,8 @@ from pagecheck.acquisition.browser.public_navigation import (
     BrowserFetchBlocked, ResourceResponse, install_guarded_routes,
     inspect_public_page,
 )
+from pagecheck.acquisition.browser.egress_guard import launch_guarded_chromium
+from pagecheck.application.use_cases import collect_public_visuals as collector
 
 
 @dataclass
@@ -78,14 +80,15 @@ def test_internal_destination_is_blocked_before_fetcher():
     assert report.blocked
 
 
-def test_post_and_scripts_are_blocked():
+def test_post_is_blocked_and_script_get_is_brokered():
     context, report = make_context(ok_fetch)
     post = FakeRoute("https://example.com/form", method="POST")
     script = FakeRoute("https://example.com/app.js", resource_type="script")
     context.handler(post)
     context.handler(script)
-    assert post.aborted and script.aborted
-    assert report.delivered == 0
+    assert post.aborted
+    assert script.fulfilled is not None
+    assert report.delivered == 1
 
 
 def test_request_count_limit():
@@ -117,3 +120,36 @@ def test_reject_private_target_before_browser_start(tmp_path):
         pass
     else:
         raise AssertionError("IP local não deve ser aceito")
+
+
+def test_guarded_javascript_renders_in_desktop_and_mobile(monkeypatch, tmp_path):
+    from playwright.sync_api import sync_playwright
+
+    html = (b"<!doctype html><html><body><p id='status'>before</p>"
+            b"<script src='/app.js'></script></body></html>")
+
+    def fetcher(url, *, max_bytes):
+        if url.endswith("/app.js"):
+            return ResourceResponse(url, 200, "application/javascript",
+                                    b"document.querySelector('#status').textContent='rendered';")
+        return ResourceResponse(url, 200, "text/html", html)
+
+    observed = []
+
+    def inspect(page, **_kwargs):
+        observed.append(page.locator("#status").inner_text())
+        return {"scroll_complete": True, "findings": [], "screenshots": {},
+                "limitations": [], "geometry": {}, "images": {}}
+
+    monkeypatch.setattr(collector, "audit_visual_viewport", inspect)
+    with sync_playwright() as playwright:
+        browser = launch_guarded_chromium(playwright.chromium)
+        try:
+            result = collector.capture_with_browser(
+                browser, url="https://example.com/", output_dir=tmp_path,
+                fetch_resource=fetcher,
+            )
+        finally:
+            browser.close()
+    assert observed == ["rendered", "rendered"]
+    assert result["mode"] == "guarded_javascript_get_only"

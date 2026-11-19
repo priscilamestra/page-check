@@ -58,6 +58,19 @@ def test_impeccable_list_and_envelope():
     assert normalize_impeccable({"findings": []})["findings"] == []
 
 
+def test_impeccable_current_detector_shape():
+    result = normalize_impeccable([{
+        "antipattern": "flat-type-hierarchy", "name": "Flat type hierarchy",
+        "description": "Heading and body roles are too similar.", "severity": "warning",
+        "category": "slop", "file": "snapshot.html", "line": 0,
+        "snippet": "body 16px, h1 16px",
+    }])
+    finding = result["findings"][0]
+    assert finding["id"].startswith("impeccable:flat-type-hierarchy:")
+    assert finding["title"] == "Flat type hierarchy"
+    assert finding["evidence"]["snippet"] == "body 16px, h1 16px"
+
+
 def test_impeccable_invalid_shape():
     with pytest.raises(EngineOutputError):
         normalize_impeccable({"message": "ok"})

@@ -55,7 +55,7 @@ def inspect_navigation(html: str, page_url: str) -> list[dict]:
         text = a.get_text(" ", strip=True) or str(a.get("aria-label") or "").strip()
         element = {"tag": "a", "index": index, "id": a.get("id"), "text": text,
                    "href": href, "selector_hint": f"#{a['id']}" if a.get("id") else None,
-                   "selector": _element_selector(a)}
+                   "selector": _element_selector(a), "element_html": str(a)[:1000]}
         is_cta = bool(CTA_TERMS.search(text) or a.get("data-cta"))
         prefix = "CTA" if is_cta else "LINK"
         if not href or href == "#":
@@ -105,6 +105,7 @@ def inspect_navigation(html: str, page_url: str) -> list[dict]:
             "CTA identificado; ação não executada", evidence={"tag": "button",
                 "id": button.get("id"), "text": text, "type": button_type,
                 "selector": _element_selector(button),
+                "element_html": str(button)[:1000],
                 "inside_form": in_form},
             recommendation="Validar a ação em teste autorizado. O Page Check não envia formulários."))
     return results

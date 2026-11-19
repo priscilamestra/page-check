@@ -1,8 +1,8 @@
-"""Optional local-only public-page visual capture using existing guarded Playwright routes.
+"""Guarded public-page visual capture using brokered Playwright requests.
 
-This is a conservative renderer: JavaScript is disabled, browser requests are
-intercepted by the Python IP-pinned HTTP transport, and only GET HTML/CSS/images/
-fonts are allowed. It is NOT a network sandbox for publicly deployed auditing.
+Page JavaScript may render, but every HTTP(S) request remains an intercepted,
+validated, bounded GET. POST, WebSocket, service workers, downloads, browser
+credentials and direct internet sockets remain blocked.
 """
 from __future__ import annotations
 
@@ -14,21 +14,28 @@ from uuid import uuid4
 from playwright.sync_api import Browser, sync_playwright
 
 from pagecheck.acquisition.browser.egress_guard import launch_guarded_chromium
-
-from pagecheck.acquisition.browser.public_navigation import (
-    fetch_public_resource, install_guarded_routes,
-)
-from pagecheck.application.use_cases.audit_visual_viewport import audit_visual_viewport
-from pagecheck.acquisition.browser.visual_probe import inspect_visible_images
-from pagecheck.acquisition.browser.visual_hierarchy import inspect_heading_hierarchy, make_design_review
 from pagecheck.acquisition.browser.layout_probe import collect_layout_observations
-from pagecheck.audits.layout.rules import build_layout_findings
-from pagecheck.reporting.annotations.findings import (build_image_findings,
-    build_capture_image_warnings)
-from pagecheck.reporting.annotations.overlay import (
-    annotate_screenshot, write_annotation_manifest, link_marker_numbers,
+from pagecheck.acquisition.browser.public_navigation import (
+    fetch_public_resource,
+    install_guarded_routes,
 )
+from pagecheck.acquisition.browser.visual_hierarchy import (
+    inspect_heading_hierarchy,
+    make_design_review,
+)
+from pagecheck.acquisition.browser.visual_probe import inspect_visible_images
+from pagecheck.application.use_cases.audit_visual_viewport import audit_visual_viewport
+from pagecheck.audits.layout.rules import build_layout_findings
 from pagecheck.common.security.url_validation import validate_public_url
+from pagecheck.reporting.annotations.findings import (
+    build_capture_image_warnings,
+    build_image_findings,
+)
+from pagecheck.reporting.annotations.overlay import (
+    annotate_screenshot,
+    link_marker_numbers,
+    write_annotation_manifest,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 VIEWPORTS = {"desktop": (1280, 720), "mobile": (390, 720)}
@@ -40,7 +47,7 @@ def capture_with_browser(
     fetch_resource: Callable[..., Any] = fetch_public_resource,
     include_rendering_hints: bool = False,
 ) -> dict[str, Any]:
-    """Capture two independent viewports without clicks, POST, or JavaScript.
+    """Capture two independent viewports without clicks, POST, or direct network.
 
     Network failures leave the individual viewport unverified. This function
     never turns blocked assets into confirmed broken images.
@@ -54,7 +61,7 @@ def capture_with_browser(
             context = browser.new_context(
                 viewport={"width": width, "height": height},
                 device_scale_factor=1,
-                java_script_enabled=False,
+                java_script_enabled=True,
                 service_workers="block",
                 accept_downloads=False,
                 permissions=[],
@@ -68,6 +75,11 @@ def capture_with_browser(
             if response is None or not response.ok:
                 errors[viewport] = "The page could not be loaded in the guarded browser."
                 continue
+            # Let bounded async rendering settle without waiting indefinitely for
+            # analytics, polling, or other background activity.
+            settle = getattr(page, "wait_for_timeout", None)
+            if callable(settle):
+                settle(750)
             document_height = int(page.evaluate(
                 "() => Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)"
             ))
@@ -91,7 +103,7 @@ def capture_with_browser(
                 image_probe_error = None
                 try:
                     images = inspect_visible_images(page)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - keep the captured viewport.
                     images = []
                     image_probe_error = type(exc).__name__
                 blocked = {row["url"] for row in getattr(network, "blocked", [])}
@@ -128,7 +140,7 @@ def capture_with_browser(
                     finding["title"] = "Imagem não carregou na área visível"
                     finding["description"] = (
                         "A imagem visível não foi decodificada neste navegador "
-                        "com JavaScript desativado. Verifique a URL e o arquivo."
+                        "guardado. Verifique a URL, o arquivo e o carregamento dinâmico."
                     )
                 screenshot_paths = {"initial": str(screenshot)}
                 if findings:
@@ -167,7 +179,10 @@ def capture_with_browser(
                            if image_probe_error else
                            "Only visible images in the first viewport were checked. ")
                         + "The rest of the page and layout were not verified.",
-                        "JavaScript is disabled; JS-dependent content was not verified.",
+                        (
+                            "JavaScript rendered under the guarded GET-only network budget; "
+                            "interactive actions were not executed."
+                        ),
                         *([f"Initial-viewport image inspection was not verified ({image_probe_error})."]
                           if image_probe_error else []),
                     ],
@@ -180,12 +195,16 @@ def capture_with_browser(
                 continue
             observation = audit_visual_viewport(
                 page, output_dir=output_dir / viewport,
-                blocked_urls=lambda: {row["url"] for row in network.blocked},
+                blocked_urls=lambda network=network: {
+                    row["url"] for row in network.blocked
+                },
                 include_rendering_hints=include_rendering_hints,
             )
             observation["limitations"] = [
-                "JavaScript is disabled: interactive widgets, client-side navigation "
-                "and JS-only content have not been tested."
+                (
+                    "JavaScript rendered under the guarded GET-only network budget; clicks, "
+                    "form submissions, WebSockets and client-side actions were not tested."
+                )
             ]
             if network.blocked:
                 observation["limitations"].append(
@@ -198,7 +217,7 @@ def capture_with_browser(
                 "blocked_count": len(network.blocked),
             }
             results[viewport] = observation
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - one viewport must not erase the other.
             # A visual failure should not erase a valid HTML / SEO audit.
             errors[viewport] = f"Visual inspection unavailable ({type(exc).__name__})."
         finally:
@@ -210,7 +229,7 @@ def capture_with_browser(
                               or any(not item.get("scroll_complete", True)
                                      for item in results.values())) else "captured",
         "errors": errors,
-        "mode": "guarded_static_no_javascript",
+        "mode": "guarded_javascript_get_only",
     }
 
 
@@ -218,10 +237,10 @@ def collect_public_visuals(
     url: str, *, output_base: Path | None = None,
     browser_launcher: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
-    """Local-only collector, producing files inside ``artifacts/page_audits``.
+    """Collector producing files inside ``artifacts/page_audits``.
 
     ``browser_launcher`` allows offline tests to supply a controlled Chromium.
-    Public deployment MUST NOT enable this function without OS-level isolation.
+    Production still requires the Stage 43 OS-level worker isolation.
     """
     url = validate_public_url(url)
     base = output_base if output_base is not None else PROJECT_ROOT / "artifacts" / "page_audits"

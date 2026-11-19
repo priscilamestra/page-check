@@ -1,7 +1,7 @@
 {
   "name": "pagecheck",
   "version": "1.0.0",
-  "description": "**Status:** estrutura inicial e conexão API/UI prontas. **Os motores de auditoria ainda NÃO foram implementados.**",
+  "description": "Deterministic landing-page auditing with guarded browser evidence and isolated diagnostics.",
   "main": "index.js",
   "directories": {
     "doc": "docs",

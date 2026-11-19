@@ -15,6 +15,12 @@ def test_field_without_label_is_warning():
     result = inspect_forms(html, URL)
     assert result[0]["status"] == "warning"
     assert result[0]["evidence"]["unlabeled_fields"] == ["email"]
+    assert result[0]["evidence"]["selector"] == "form:nth-of-type(1)"
+
+
+def test_form_id_is_used_as_specific_location():
+    result = inspect_forms('<form id="signup"><input name="email"></form>', URL)
+    assert result[0]["evidence"]["selector"] == "#signup"
 
 
 def test_wrapping_label_is_accepted():

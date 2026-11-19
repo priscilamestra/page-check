@@ -26,7 +26,6 @@ def check_copy(check: Mapping) -> tuple[str, str]:
     evidence = check.get("evidence") or {}
     if not isinstance(evidence, Mapping):
         evidence = {}
-    observed = evidence.get("observed_value")
     if code.startswith("SEO_TARGET_KEYWORD_") or code in {"SEO_CONTENT_LANGUAGE", "SEO_NICHE_CONTEXT"}:
         return str(check.get("title") or "Content review"), str(check.get("recommendation") or "")
     if code == "SEO_TITLE":
@@ -71,7 +70,8 @@ def check_copy(check: Mapping) -> tuple[str, str]:
         if status == "failed":
             return ("Broken in-page anchor", "Correct the target anchor ID for this link.")
         if status == "not_verified":
-            return ("Link destination identified, not tested", "Check the destination with an approved network test.")
+            return ("Link destination identified, not tested",
+                    "This audit recorded the destination but did not open it.")
         if not href or href == "#":
             return ("Link has no destination", "Set a valid URL or verify its JavaScript behavior.")
         return ("Link structure reviewed", "Review this link's destination and behavior." if status == "warning" else "")
@@ -145,8 +145,14 @@ def englishize_report(report: dict) -> dict:
         "No keyword ranking, search volume, or paid API research is performed.",
     ]
     if report.get("visual_capture"):
-        report["limitations"].append(
-            "Browser capture uses guarded static rendering without JavaScript; "
-            "interactive actions and JS-dependent content remain unverified."
-        )
+        mode = str((report.get("visual_capture") or {}).get("mode") or "")
+        if mode == "guarded_javascript_get_only":
+            report["limitations"].append(
+                "Browser capture renders JavaScript through a guarded GET-only network path; "
+                "clicks, submissions and WebSockets remain unverified."
+            )
+        else:
+            report["limitations"].append(
+                "Browser capture did not confirm interactive actions or JavaScript-dependent behavior."
+            )
     return report

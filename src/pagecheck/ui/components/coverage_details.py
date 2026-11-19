@@ -11,10 +11,10 @@ from typing import Any
 SOURCE_DEFINITIONS = (
     ("seo", "Technical SEO", "SEO checks use extracted HTML, not Google rankings."),
     ("conversion", "Conversion HTML", "Links, forms and tracking are inspected without submitting anything."),
-    ("desktop", "Desktop screenshot", "Static browser capture; page JavaScript is disabled."),
-    ("mobile", "Mobile screenshot", "Static browser capture; page JavaScript is disabled."),
+    ("desktop", "Desktop screenshot", "Guarded JavaScript rendering; no clicks or submissions."),
+    ("mobile", "Mobile screenshot", "Guarded JavaScript rendering; no clicks or submissions."),
     ("axe", "Accessibility (axe-core)", "Static HTML semantics only; not full WCAG testing."),
-    ("impeccable", "Design (Impeccable)", "Sanitized HTML only; CSS and runtime layout are not checked."),
+    ("impeccable", "Design (Impeccable)", "Sanitized HTML heuristics; runtime layout still needs visual review."),
     ("lighthouse", "Performance (Lighthouse)", "Public-URL Chrome execution is disabled for safety."),
 )
 

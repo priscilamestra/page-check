@@ -47,7 +47,9 @@ def inspect_forms(html: str, page_url: str, *, objective: str = "leads") -> list
                      for field in fields if not _has_label(soup, field)]
         form_evidence = {"form_index": index, "id": form.get("id"), "method": method,
                          "action": action or None, "resolved_action": resolved,
-                         "field_count": len(fields)}
+                         "field_count": len(fields),
+                         "selector": (f"#{form['id']}" if form.get("id") else
+                                      f"form:nth-of-type({index})")}
         results.append(_finding(f"FORM_FIELDS_{index}",
             "passed" if not unlabeled else "warning",
             "Campos com rótulos detectáveis" if not unlabeled else "Campos sem rótulo detectável",

@@ -1,31 +1,33 @@
-"""Aquisição visual em navegador com rede HTTP(S) intermediada por Python.
+"""Aquisição visual com JavaScript e rede HTTP(S) intermediada por Python.
 
-Etapa 11: modo conservador sem JavaScript para capturar HTML/CSS/imagens
-públicas. Não expor como serviço público de navegação arbitrária: proteção
-adicional no nível do sistema operacional (sandbox de rede) ainda é necessária.
+Scripts podem renderizar a página, mas toda requisição continua limitada a GET,
+validada e entregue pelo broker. O sandbox de rede do sistema operacional segue
+obrigatório em produção.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from time import monotonic
 from pathlib import Path
+from time import monotonic
 from urllib.parse import urljoin
 
 import httpx
 from playwright.sync_api import Browser, Route
 
+from pagecheck.acquisition.browser.visual_probe import inspect_rendered_page
 from pagecheck.acquisition.http.safe_transport import public_transport_for_audit
 from pagecheck.common.security.url_validation import validate_public_url
-from pagecheck.acquisition.browser.visual_probe import inspect_rendered_page
 
 MAX_RESOURCE_BYTES = 2_000_000
 MAX_TOTAL_BYTES = 12_000_000
 MAX_REQUESTS = 60
 MAX_REDIRECTS = 3
-_ALLOWED_TYPES = {"document", "stylesheet", "image", "font"}
+_ALLOWED_TYPES = {"document", "stylesheet", "image", "font", "script", "xhr", "fetch"}
 _ALLOWED_MIMES = (
     "text/html", "application/xhtml+xml", "text/css", "image/",
     "font/", "application/font-woff", "application/octet-stream",
+    "application/javascript", "text/javascript", "application/json", "text/plain",
+    "application/manifest+json",
 )
 
 
@@ -59,7 +61,7 @@ def fetch_public_resource(
             trust_env=False,
             follow_redirects=False,
             timeout=httpx.Timeout(6.0),
-            headers={"User-Agent": "PageCheck/0.1 (local visual audit)"},
+            headers={"User-Agent": "PageCheck/0.1 (guarded visual audit)"},
         ) as client:
             for hop in range(MAX_REDIRECTS + 1):
                 current = validate_public_url(current)
@@ -163,17 +165,16 @@ def inspect_public_page(
     height: int = 720,
     fetch_resource=fetch_public_resource,
 ) -> dict:
-    """Navega sem JavaScript; coleta evidências no modo conservador local.
+    """Navega com JavaScript sob rotas GET guardadas.
 
-    Não testa funcionalidades dependentes de JS nesta etapa. Uso com URLs de
-    terceiros fica restrito ao ambiente local; não implantar em serviço público.
+    Não clica nem envia formulários. Produção exige o worker isolado da Etapa 43.
     """
     validate_public_url(url)
     if width < 320 or width > 1920 or height < 240 or height > 1080:
         raise ValueError("Viewport fora dos limites.")
     context = browser.new_context(
         viewport={"width": width, "height": height},
-        java_script_enabled=False,
+        java_script_enabled=True,
         service_workers="block",
         accept_downloads=False,
         permissions=[],
@@ -186,7 +187,7 @@ def inspect_public_page(
             response = page.goto(url, wait_until="domcontentloaded", timeout=12000)
             if response:
                 navigation_status = "loaded" if response.ok else "failed"
-        except Exception:
+        except Exception:  # noqa: BLE001 - any browser failure leaves navigation unverified.
             navigation_status = "failed"
         if navigation_status != "loaded":
             return {"navigation_status": navigation_status, "network": vars(network)}

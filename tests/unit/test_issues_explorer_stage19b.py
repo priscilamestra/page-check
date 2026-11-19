@@ -4,7 +4,8 @@ from copy import deepcopy
 import pytest
 
 from pagecheck.ui.components.issues_explorer import (
-    finding_rows, finding_summary, filter_findings, findings_table,
+    filter_findings, finding_evidence_summary, finding_rows, finding_summary,
+    findings_table,
 )
 
 
@@ -48,6 +49,26 @@ def test_details_keep_evidence_without_mutation():
     rows = finding_rows(report)
     assert next(row for row in rows if row["check_id"] == "axe1")["evidence"] == {"nodes": ["a", "b"]}
     assert report == before
+
+
+def test_details_keep_description_target_and_viewport():
+    report = {"findings": [{"id": "a", "status": "failed", "description": "Why",
+                             "target_url": "https://example.com", "viewport": "mobile"}]}
+    row = finding_rows(report)[0]
+    assert (row["description"], row["target_url"], row["viewport"]) == (
+        "Why", "https://example.com", "mobile")
+
+
+def test_evidence_summary_includes_selectors_html_and_structured_locations():
+    summary = dict(finding_evidence_summary({
+        "selector": "main > a", "element_html": '<a href="/buy">Buy</a>',
+        "locations": {"title": False, "visible_copy": True},
+        "selectors": [["button.buy"], ["#checkout"]],
+    }, limit=10))
+    assert summary["Element selector"] == "main > a"
+    assert summary["Element HTML"].startswith("<a")
+    assert summary["Observed locations"] == "title: no, visible_copy: yes"
+    assert summary["Affected selectors"] == "button.buy, #checkout"
 
 
 def test_filters_combine_area_status_priority_and_search():

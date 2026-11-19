@@ -19,7 +19,7 @@ def normalize_impeccable(payload: object) -> dict:
         # Detector versions have used both camelCase and snake_case keys.
         # Only accept explicit rule identifiers. Never manufacture a rule ID
         # from the message, severity, file path or array position.
-        rule = (row.get("ruleId") or row.get("rule_id") or row.get("rule")
+        rule = (row.get("antipattern") or row.get("ruleId") or row.get("rule_id") or row.get("rule")
                 or row.get("id") or row.get("checkId") or row.get("check_id"))
         if isinstance(rule, dict):
             rule = (rule.get("id") or rule.get("ruleId") or rule.get("rule_id")
@@ -42,10 +42,11 @@ def normalize_impeccable(payload: object) -> dict:
         findings.append({
             "id": f"impeccable:{rule}:{index}", "source": "impeccable",
             "module": "layout", "status": "warning", "severity": severity,
-            "title": str(row.get("message") or row.get("title") or rule),
+            "title": str(row.get("name") or row.get("message") or row.get("title") or rule),
             "description": str(row.get("description") or ""),
             "evidence": {"rule_id": rule, "file": row.get("file"),
-                         "line": row.get("line"), "selector": row.get("selector")},
+                         "line": row.get("line"), "selector": row.get("selector"),
+                         "category": row.get("category"), "snippet": row.get("snippet")},
             "owner": "Design / Frontend",
         })
     return result("impeccable", findings=findings, metrics={"findings": len(findings)},

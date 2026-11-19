@@ -12,9 +12,11 @@ import streamlit as st
 
 from pagecheck.reporting.english_copy import check_copy, team_name
 from pagecheck.ui.components.issues_explorer import (
-    filter_findings, finding_rows, finding_summary, finding_evidence_summary,
+    filter_findings,
+    finding_evidence_summary,
+    finding_rows,
+    finding_summary,
 )
-
 
 _PRIORITY_COLORS = {
     "critical": "red", "high": "red", "medium": "orange", "low": "gray", "info": "gray",
@@ -106,31 +108,40 @@ def render_issues(report: dict[str, Any]) -> None:
                     color=(_PRIORITY_COLORS[row["severity"]] if row["status"] == "failed"
                            else ("gray" if row["severity"] in {"low", "info"} else "orange")),
                 )
-            # The fix appears once, not both here and again in the details.
-            if row["status"] in {"failed", "warning"}:
-                st.markdown("**Suggested change**")
-                st.write(row["recommendation"] or
-                         "Review this finding against the affected page element.")
-            elif row["status"] == "passed":
+            if row["status"] == "passed":
                 st.caption("Check passed · no change needed")
             elif row["status"] == "not_verified":
                 st.caption("Not verified · the scan did not establish a result")
-            else:
+            elif row["status"] == "not_applicable":
                 st.caption("Not applicable to this page")
 
             evidence = finding_evidence_summary(row["evidence"])
             with st.expander("What was found and where"):
+                st.markdown("**Problem**")
+                st.write(row["description"] or row["title"])
                 if evidence:
                     for label, value in evidence:
                         st.markdown(f"**{label}**")
-                        st.text(value)
+                        if label in {"Element HTML", "HTML excerpt"}:
+                            st.code(value, language="html")
+                        elif label in {"Element selector", "Selector hint", "DOM location",
+                                       "Element location", "Affected selectors"}:
+                            st.code(value, language="css")
+                        else:
+                            st.text(value)
                 else:
                     st.caption(
                         "The audit did not provide a usable element location or observed "
                         "value for this finding, so it cannot yet point to the exact "
                         "place to make the change."
                     )
+                if row["status"] in {"failed", "warning"}:
+                    st.markdown("**Correction**" if row["status"] == "failed" else
+                                "**Recommended review**")
+                    st.write(row["recommendation"] or
+                             "Review this finding against the recorded evidence.")
                 if row["check_id"]:
                     st.caption(f"Check: {row['check_id']}")
                 if row["source"] and row["source"] != "Unknown":
                     st.caption(f"Evidence source: {row['source']}")
+                st.json(row["evidence"], expanded=False)

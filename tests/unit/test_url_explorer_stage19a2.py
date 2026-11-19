@@ -2,7 +2,7 @@
 from copy import deepcopy
 
 from pagecheck.ui.components.url_explorer import (
-    area_summary, campaign_parameters, check_rows, filter_rows,
+    area_summary, campaign_parameters, check_rows, filter_rows, group_check_rows,
 )
 from pagecheck.ui.components.coverage_composition import source_composition_html
 
@@ -97,6 +97,30 @@ def test_report_not_modified_by_view_helpers():
     filter_rows(check_rows(report), status="All")
     campaign_parameters(report)
     assert report == original
+
+
+def test_repeated_unverified_links_are_grouped_without_losing_records():
+    rows = check_rows(sample(), describe=lambda item: (
+        "Link destination identified, not tested" if item.get("module") == "navigation"
+        and item.get("status") == "not_verified" else item.get("check_id", "Check"),
+        "Coverage limit" if item.get("status") == "not_verified" else "",
+    ))
+    grouped = group_check_rows(rows)
+    navigation = next(row for row in grouped
+                      if row["area"] == "navigation" and row["status"] == "not_verified")
+    assert navigation["occurrences"] == 2
+    assert [item["check_id"] for item in navigation["members"]] == ["nav-1", "nav-2"]
+
+
+def test_element_destination_and_location_are_exposed_from_recorded_evidence():
+    report = {"checks": [{
+        "module": "navigation", "status": "warning", "check_id": "nav",
+        "evidence": {"text": "Buy", "resolved_url": "https://example.com/buy",
+                     "selector": "main > a:nth-of-type(1)"},
+    }]}
+    row = check_rows(report)[0]
+    assert (row["element"], row["destination"], row["location"]) == (
+        "Buy", "https://example.com/buy", "main > a:nth-of-type(1)")
 
 
 def test_one_composition_bar_has_actual_total_and_all_statuses():

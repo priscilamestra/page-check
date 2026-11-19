@@ -7,7 +7,7 @@ import pytest
 
 from pagecheck.ui.components.overview_insights import (
     actionable_rows, area_bars_html, coverage_bars_html, missing_evidence_rows,
-    prioritized_findings, source_counts, count_label,
+    prioritized_findings, seo_keyword_groups, source_counts, count_label,
 )
 
 
@@ -172,3 +172,27 @@ def test_coverage_chart_widths_are_relative_to_total_not_to_max():
 
 def test_empty_coverage_does_not_invent_full_completion():
     assert coverage_bars_html({}) == ""
+
+
+def test_keyword_groups_use_only_recorded_seo_evidence():
+    report = {"checks": [
+        {"check_id": "SEO_TARGET_KEYWORD_1", "status": "warning",
+         "evidence": {"keyword": "automation", "locations": {"visible_copy": True}}},
+        {"check_id": "SEO_TARGET_KEYWORD_2", "status": "warning",
+         "evidence": {"keyword": "sales ops", "locations": {"visible_copy": False}}},
+        {"check_id": "SEO_TARGET_KEYWORD_3", "status": "passed",
+         "evidence": {"keyword": "crm", "locations": {"title": True}}},
+        {"check_id": "SEO_NICHE_CONTEXT", "status": "not_verified",
+         "evidence": {"niche": "Revenue operations", "locations": {"title": False}}},
+    ]}
+    groups = seo_keyword_groups(report)
+    assert groups["missing_or_improve"] == [
+        {"term": "automation", "reason": "Improve prominence"},
+        {"term": "sales ops", "reason": "Missing from page copy"},
+    ]
+    assert groups["review_relevance"][0]["term"] == "Revenue operations"
+
+
+def test_keyword_groups_do_not_invent_relevance_without_evidence():
+    assert seo_keyword_groups({"checks": []}) == {
+        "missing_or_improve": [], "review_relevance": []}

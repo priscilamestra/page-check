@@ -6,7 +6,7 @@ Full technical evidence remains on the original check for explicit inspection.
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Mapping, Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
@@ -69,6 +69,14 @@ def check_rows(report: Mapping[str, Any],
         status = str(check.get("status") or "not_verified")
         if status not in STATUS_TEXT:
             status = "not_verified"
+        evidence = check.get("evidence") or {}
+        if not isinstance(evidence, Mapping):
+            evidence = {}
+        element = str(evidence.get("text") or evidence.get("id") or evidence.get("tag") or "")
+        destination = str(evidence.get("resolved_url") or evidence.get("resolved_action")
+                          or evidence.get("href") or evidence.get("action") or "")
+        location = str(evidence.get("selector") or evidence.get("selector_hint")
+                       or evidence.get("form_index") or "")
         rows.append({
             "index": index,
             "area": str(check.get("module")),
@@ -77,11 +85,27 @@ def check_rows(report: Mapping[str, Any],
             "label": STATUS_TEXT[status],
             "recommendation": str(recommendation or ""),
             "check_id": str(check.get("check_id") or check.get("id") or ""),
-            "evidence": check.get("evidence") or {},
+            "evidence": evidence,
             "source": str(check.get("source") or ""),
+            "element": element,
+            "destination": destination,
+            "location": location,
         })
     return sorted(rows, key=lambda r: (_STATUS_SORT[r["status"]],
                                        CHECK_AREAS.index(r["area"]), r["index"]))
+
+
+def group_check_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse repeated diagnoses while retaining every original check."""
+    grouped: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        key = (row["area"], row["status"], row["title"], row["recommendation"])
+        if key in grouped:
+            grouped[key]["members"].append(row)
+            grouped[key]["occurrences"] += 1
+        else:
+            grouped[key] = {**row, "members": [row], "occurrences": 1}
+    return list(grouped.values())
 
 
 def area_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -110,7 +134,9 @@ def filter_rows(rows: list[dict[str, Any]], *, area: str = "All",
             continue
         if status not in {"All", "Needs attention"} and row["label"] != status:
             continue
-        haystack = " ".join((row["title"], row["check_id"], row["recommendation"]))
+        haystack = " ".join((row["title"], row["check_id"], row["recommendation"],
+                             row.get("element", ""), row.get("destination", ""),
+                             row.get("location", "")))
         if needle and needle not in haystack.casefold():
             continue
         matches.append(row)
