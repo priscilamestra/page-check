@@ -3,13 +3,16 @@
 ![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white)
 ![uv](https://img.shields.io/badge/uv-Package%20Management-DE5FE9?style=flat-square&logo=uv&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Local%20API-009688?style=flat-square&logo=fastapi&logoColor=white)
+![Beautiful Soup](https://img.shields.io/badge/Beautiful%20Soup-HTML%20Parsing-59666C?style=flat-square)
 ![Streamlit](https://img.shields.io/badge/Streamlit-Report%20UI-FF4B4B?style=flat-square&logo=streamlit&logoColor=white)
 ![Playwright](https://img.shields.io/badge/Playwright-Browser%20Evidence-2EAD33?style=flat-square&logo=playwright&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-Local%20History-003B57?style=flat-square&logo=sqlite&logoColor=white)
 
-Page Check is a local application for auditing landing pages and public web pages across technical SEO, content relevance, internal links, navigation, accessibility, design signals, and visual rendering.
+Page Check turns a public landing-page URL into an evidence-backed audit of technical SEO, content relevance, internal links, navigation, accessibility signals, design checks, and responsive rendering.
 
-It is intentionally **code-first, deterministic, and low-cost to operate**. Each audit uses Python rules and specialized libraries instead of calling an LLM, which keeps results traceable and avoids recurring model-token costs.
+I built it for SEO, growth, marketing, and frontend work where a score alone is not enough: every important result needs an observable problem, location, evidence, and recommended action.
+
+The application is intentionally **local, code-first, deterministic, and low-cost to operate**. Python rules and specialized libraries handle repeatable checks without consuming LLM tokens on every audit, while the architecture keeps results inspectable and protects the machine running the scan.
 
 ## Demo
 
@@ -23,13 +26,15 @@ It is intentionally **code-first, deterministic, and low-cost to operate**. Each
 
 ## The Problem
 
-Reviewing a landing page manually means inspecting metadata, headings, keyword placement, internal links, redirects, anchors, accessibility signals, responsive rendering, and conversion elements across several tools.
+Reviewing a landing page manually means inspecting metadata, headings, keyword placement, internal links, redirects, anchors, accessibility signals, responsive rendering, and conversion elements across several tools. The reviewer must then reconcile different outputs and translate them into work that SEO, content, design, and frontend teams can actually use.
 
 The result is often fragmented: a score has no visible evidence, unchecked URLs look like failures, recommendations are generic, and browser-based tools can access destinations outside the intended audit boundary.
 
+This also creates an operational cost problem. Stable checks such as title presence, heading structure, keyword placement, redirects, broken links, and missing attributes do not require a generative model for every execution. Paying with tokens or usage credits each time makes frequent audits harder to standardize and unnecessarily expensive to repeat across pages and campaigns.
+
 ## The Solution
 
-Page Check runs one bounded local workflow that:
+I built Page Check to move those repeatable decisions into a bounded local workflow that:
 
 1. Validates and fetches a public URL through a protected transport.
 2. Evaluates technical SEO with explicit weighted rules.
@@ -40,7 +45,7 @@ Page Check runs one bounded local workflow that:
 7. Consolidates evidence into Overview, URLs, Issues, Screenshots, and Export views.
 8. Persists reports locally and exports JSON, CSV, and ZIP artifacts.
 
-The application reports only what it observed. Missing coverage remains explicit instead of being converted into an invented diagnosis.
+The result is a reusable report that connects technical evidence to action without inventing findings. Missing coverage remains explicit instead of being converted into a failure, and the same deterministic rules can be run repeatedly without a per-audit model dependency.
 
 ## Application Overview
 
@@ -113,11 +118,7 @@ The crawler separates **verification** from **expansion**. `max_pages` and `max_
 
 ### Deterministic, low-token operation
 
-Page Check does not call generative AI, Jev, TypeSafe AI, DataForSEO, or paid SEO APIs. Deterministic code handles retrieval, parsing, scoring, keyword checks, grouping, and recommendations. This makes each result inspectable and keeps recurring token and model costs out of the audit path.
-
-### Honest engine coverage
-
-Lighthouse was removed from the active product because its independent Chrome networking could not preserve Page Check's transport guarantees. It does not appear in scores, sources, UI, or exports. Static axe-core and Impeccable results are retained with explicit limitations rather than presented as full browser or WCAG audits.
+Deterministic code handles retrieval, parsing, scoring, keyword checks, link validation, grouping, and rule-specific recommendations. Specialized engines are used only where they add measurable evidence. This keeps each result inspectable, supports repeatable daily use, and keeps recurring token and model costs out of the audit path.
 
 ## Tech Stack
 
@@ -176,7 +177,7 @@ Screenshots use the real rendered page and preserve the approved report design. 
 │   ├── application/use_cases/     # Audit, crawl, engine, and consolidation orchestration
 │   ├── audits/                    # SEO, content, navigation, layout, image, and form rules
 │   ├── common/security/           # URL admission, network boundaries, and worker isolation
-│   ├── integrations/              # axe-core, Impeccable, and inactive legacy adapters
+│   ├── integrations/              # axe-core and Impeccable adapters
 │   ├── persistence/               # Local SQLite history
 │   ├── reporting/                 # Normalization, evidence, and exports
 │   └── ui/                        # Streamlit application and report components
@@ -184,7 +185,7 @@ Screenshots use the real rendered page and preserve the approved report design. 
 ├── main.py                        # FastAPI entry point
 ├── streamlit_app.py               # Streamlit entry point
 ├── pyproject.toml
-└── THIRD_PARTY_NOTICES.md
+└── THIRD_PARTY_NOTICES.md         # License attribution for incorporated third-party work
 ```
 
 Local databases, user-generated reports, logs, caches, credentials, `.venv`, and `node_modules` are excluded from Git.
@@ -231,6 +232,20 @@ Run the test suite:
 uv run pytest -q
 ```
 
+## What This Project Demonstrates
+
+Page Check demonstrates how I approach a complete engineering problem rather than a single interface or isolated script:
+
+- **Secure public-page acquisition:** URL admission, DNS and redirect validation, SSRF protection, bounded bodies, timeouts, robots handling, and guarded browser requests.
+- **Modular Python architecture:** clear separation between acquisition, audit rules, orchestration, consolidation, persistence, exports, API routes, and presentation.
+- **Deterministic product logic:** weighted SEO scoring, niche/language/keyword checks, cross-page duplicate rules, and evidence-based recommendations without runtime model calls.
+- **Crawler design:** progressive same-host discovery with separate expansion and verification limits, controlled concurrency, fragment checks, redirect evidence, and loop protection.
+- **Browser and specialist-engine integration:** Playwright desktop/mobile evidence plus sanitized axe-core and Impeccable execution with explicit coverage boundaries.
+- **Traceable reporting:** normalized findings connect each issue to its source, location, observed value, destination, and recommended correction.
+- **Local-first delivery:** Streamlit, FastAPI, SQLite history, and JSON/CSV/ZIP exports run without hosted infrastructure.
+- **Verification discipline:** 594 automated tests, controlled 200-link coverage, a real public-site audit, security scanning, and real README media.
+- **Cost-aware engineering:** stable analysis stays in code so repeated audits do not create unnecessary model-token consumption.
+
 ## Tests, Limitations & Credits
 
 ### Validation
@@ -244,8 +259,7 @@ The real audit recorded:
 - evidence-based SEO keyword guidance;
 - desktop and mobile screenshots;
 - axe-core and Impeccable static results;
-- local SQLite persistence and JSON, CSV, and ZIP exports;
-- no Lighthouse source or score.
+- local SQLite persistence and JSON, CSV, and ZIP exports.
 
 ### Limitations
 
@@ -259,7 +273,7 @@ The real audit recorded:
 ### Credits and license notices
 
 - [Scrapling](https://github.com/D4Vinci/Scrapling) — BSD 3-Clause licensed `Selector` parser used over HTML already fetched by Page Check. Its fetchers, proxy, stealth, MCP, and AI features are not used.
-- [jev-seo](https://github.com/AgriciDaniel/jev-seo) — MIT licensed concepts for deterministic cross-page duplicate title and description rules. Jev, TypeSafe, DataForSEO, model scoring, and the jev-seo application are not included.
+- [jev-seo](https://github.com/AgriciDaniel/jev-seo) — MIT licensed concepts adapted into deterministic cross-page duplicate title and description rules.
 - [Playwright](https://playwright.dev/), [axe-core](https://github.com/dequelabs/axe-core), and [Impeccable](https://github.com/peterbe/impeccable) provide the specialized browser, accessibility, and static design engines used within the documented boundaries.
 
-See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution details and [docs/PRD.md](docs/PRD.md) for the validated product scope.
+See [third-party licenses and attribution](THIRD_PARTY_NOTICES.md) for the incorporated work that must retain credit, and [the validated product requirements](docs/PRD.md) for the implemented scope.
