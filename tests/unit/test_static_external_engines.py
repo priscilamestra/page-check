@@ -1,11 +1,15 @@
-"""No unguarded external navigation or fabricated Lighthouse scores."""
-from pagecheck.application.use_cases.collect_static_engines import (
-    collect_static_engines, sanitize_static_html, MAX_HTML_BYTES,
-)
-from pagecheck.integrations.engine_result import result, unavailable
+"""No unguarded external navigation or fabricated engine results."""
+import pytest
+
 from pagecheck.acquisition.http.fetcher import FetchedPage
 from pagecheck.application.use_cases.audit_page_html import audit_page_html
-import pytest
+from pagecheck.application.use_cases.collect_static_engines import (
+    MAX_HTML_BYTES,
+    collect_static_engines,
+    sanitize_static_html,
+)
+from pagecheck.common.security.url_validation import URLValidationError
+from pagecheck.integrations.engine_result import result, unavailable
 
 HTML = """<html lang='en'><head><title>Landing</title>
 <script src='https://internal.local/leak.js'>alert(1)</script>
@@ -44,7 +48,6 @@ def test_static_collector_isolates_engine_exceptions(tmp_path):
     assert len(calls) == 1
     assert out["engines"]["axe"]["status"] == "completed"
     assert out["engines"]["impeccable"]["status"] == "not_verified"
-    assert out["engines"]["lighthouse"]["status"] == "not_verified"
     assert out["status"] == "partial"
 
 
@@ -53,7 +56,7 @@ def test_static_collector_does_not_run_engines_for_private_target():
     def spy(*args, **kwargs):
         called.append(1)
         return result("axe")
-    with pytest.raises(Exception):
+    with pytest.raises(URLValidationError):
         collect_static_engines(HTML, "http://127.0.0.1/", axe_runner=spy)
     assert not called
 
@@ -64,12 +67,12 @@ def test_combined_report_includes_same_page_external_findings():
     def engines(html, final_url):
         assert "<h1>A</h1>" in html
         assert final_url == "https://example.com/a"
-        return {"engines": {"axe": result("axe", findings=[{"id": "axe:fake", "module":"accessibility", "status":"failed", "severity":"medium", "title":"Missing label", "description":"", "evidence":{"selector":"input"}, "owner":"Frontend"}]), "lighthouse": unavailable("lighthouse", "No safe Chrome"), "impeccable": unavailable("impeccable", "Not installed")}}
+        return {"engines": {"axe": result("axe", findings=[{"id": "axe:fake", "module":"accessibility", "status":"failed", "severity":"medium", "title":"Missing label", "description":"", "evidence":{"selector":"input"}, "owner":"Frontend"}]), "impeccable": unavailable("impeccable", "Not installed")}}
     report = audit_page_html("https://example.com/a", niche="Software", objective="leads",
                               fetch=fetch, external_collector=engines)
     assert report["source_states"]["engines"]["axe"] == "completed"
-    assert report["source_states"]["engines"]["lighthouse"] == "not_verified"
-    assert report["scores"]["lighthouse"] is None
+    assert "lighthouse" not in report["source_states"]["engines"]
+    assert "lighthouse" not in report["scores"]
     assert any(x.get("source") == "axe" for x in report["checks"])
     assert report["external_capture"]["mode"] == "opt_in_sanitized_static_html"
 

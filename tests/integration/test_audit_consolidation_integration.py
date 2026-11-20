@@ -1,9 +1,9 @@
 """Fluxo real de regras existentes para o contrato único, sem rede/CLI."""
 from pagecheck.application.use_cases.audit_conversion_page import audit_conversion_html
 from pagecheck.application.use_cases.consolidate_audit import consolidate_audit
+from pagecheck.application.use_cases.external_engines import combine_engines
 from pagecheck.audits.seo.rules import audit_seo
 from pagecheck.integrations.axe.adapter import normalize_axe
-from pagecheck.application.use_cases.external_engines import combine_engines
 
 
 def test_seo_and_conversion_produce_single_consistent_report():
@@ -25,6 +25,6 @@ def test_seo_and_conversion_produce_single_consistent_report():
                                conversion=conv, external=engines)
     assert report["summary"]["counts"]["failed"] >= 4
     assert report["source_states"]["seo"] == "completed"
-    assert report["source_states"]["engines"]["lighthouse"] == "not_verified"
-    assert report["scores"]["lighthouse"] is None
+    assert set(report["source_states"]["engines"]) == {"axe", "impeccable"}
+    assert "lighthouse" not in report["scores"]
     assert report["summary"]["priority_count"] >= 4

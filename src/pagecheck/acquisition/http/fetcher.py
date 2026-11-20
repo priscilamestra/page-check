@@ -25,6 +25,16 @@ class FetchedPage:
     redirects: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class FetchedResource:
+    original_url: str
+    final_url: str
+    status_code: int
+    content_type: str
+    text: str
+    redirects: tuple[str, ...]
+
+
 def fetch_html(url: str, *, transport: httpx.BaseTransport | None = None) -> FetchedPage:
     """Faz GET com IP validado no connect; transporte injetável nos testes."""
     current = url
@@ -66,3 +76,56 @@ def fetch_html(url: str, *, transport: httpx.BaseTransport | None = None) -> Fet
     except (httpx.HTTPError, httpcore.NetworkError, httpcore.TimeoutException, httpcore.ProtocolError) as exc:
         raise FetchError(f"Falha ao consultar a página: {type(exc).__name__}") from exc
     raise FetchError("A consulta não pôde ser concluída.")
+
+
+def fetch_resource(url: str, *, transport: httpx.BaseTransport | None = None,
+                   max_body_bytes: int = MAX_BODY_BYTES) -> FetchedResource:
+    """GET público limitado para validar links, robots e páginas internas.
+
+    Diferentemente de ``fetch_html``, preserva respostas 4xx/5xx como evidência.
+    Cada redirecionamento continua passando pela validação de URL e pelo
+    transporte que fixa o IP público aprovado.
+    """
+    current = url
+    redirects: list[str] = []
+    try:
+        with httpx.Client(
+            transport=transport if transport is not None else public_transport_for_audit(),
+            follow_redirects=False,
+            timeout=httpx.Timeout(8.0),
+            trust_env=False,
+            headers={"User-Agent": "PageCheck/0.1 (limited public crawl)"},
+        ) as client:
+            for hop in range(MAX_REDIRECTS + 1):
+                current = validate_public_url(current)
+                with client.stream("GET", current) as response:
+                    if 300 <= response.status_code < 400:
+                        location = response.headers.get("location")
+                        if not location:
+                            raise FetchError("Resposta de redirecionamento sem Location.")
+                        if hop >= MAX_REDIRECTS:
+                            raise FetchError("Limite de redirecionamentos excedido.")
+                        current = urljoin(str(response.url), location)
+                        redirects.append(current)
+                        continue
+                    length = response.headers.get("content-length")
+                    if length and length.isdecimal() and int(length) > max_body_bytes:
+                        raise FetchError("Recurso maior que o limite permitido.")
+                    body = bytearray()
+                    for chunk in response.iter_bytes():
+                        body.extend(chunk)
+                        if len(body) > max_body_bytes:
+                            raise FetchError("Recurso maior que o limite permitido.")
+                    content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
+                    return FetchedResource(
+                        original_url=url,
+                        final_url=str(response.url),
+                        status_code=response.status_code,
+                        content_type=content_type,
+                        text=body.decode(response.encoding or "utf-8", errors="replace"),
+                        redirects=tuple(redirects),
+                    )
+    except (httpx.HTTPError, httpcore.NetworkError, httpcore.TimeoutException,
+            httpcore.ProtocolError) as exc:
+        raise FetchError(f"Falha ao consultar o recurso: {type(exc).__name__}") from exc
+    raise FetchError("A consulta do recurso não pôde ser concluída.")

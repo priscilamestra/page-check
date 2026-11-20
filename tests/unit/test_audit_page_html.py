@@ -21,7 +21,7 @@ def test_unified_result_from_one_fetch():
     assert result['source_states']['seo'] == 'completed'
     assert result['source_states']['conversion'] == 'completed'
     assert result['source_states']['visuals']['mobile'] == 'not_verified'
-    assert result['scores']['lighthouse'] is None
+    assert 'lighthouse' not in result['scores']
     assert result['http']['status_code'] == 200
     assert any(c['id'].endswith('URL_REDIRECT_PARAMETERS') and c['status'] == 'warning' for c in result['checks'])
     assert any(c['module'] == 'navigation' for c in result['checks'])

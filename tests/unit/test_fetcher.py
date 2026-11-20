@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from pagecheck.acquisition.http.fetcher import fetch_html, FetchError
+from pagecheck.acquisition.http.fetcher import FetchError, fetch_html, fetch_resource
 from pagecheck.common.security.url_validation import URLValidationError
 
 
@@ -68,3 +68,21 @@ def test_redirect_limit():
         fetch_html('https://example.com', transport=httpx.MockTransport(
             lambda request: httpx.Response(302,headers={'location':'/again'})
         ))
+
+
+def test_resource_fetch_preserves_broken_status_as_evidence():
+    result = fetch_resource('https://example.com/missing', transport=httpx.MockTransport(
+        lambda request: httpx.Response(404, headers={'content-type': 'text/html'}, text='missing')
+    ))
+    assert result.status_code == 404
+    assert result.text == 'missing'
+
+
+def test_resource_fetch_revalidates_redirect_before_second_request():
+    calls = []
+    def handler(request):
+        calls.append(str(request.url))
+        return httpx.Response(302, headers={'location': 'http://127.0.0.1/private'})
+    with pytest.raises(URLValidationError):
+        fetch_resource('https://example.com/start', transport=httpx.MockTransport(handler))
+    assert calls == ['https://example.com/start']

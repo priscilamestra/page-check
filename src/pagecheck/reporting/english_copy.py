@@ -145,7 +145,7 @@ def englishize_report(report: dict) -> dict:
     if isinstance(coverage, dict):
         coverage["meaning"] = "Only checks received; not full coverage of all possible audits."
     report["limitations"] = [
-        "The Page Check technical SEO score is separate from Lighthouse scores.",
+        "The Page Check technical SEO score covers only its deterministic technical rules.",
         "Only executed checks are covered; unrun tools do not count as successful.",
         "This HTML audit does not execute JavaScript or validate checkout actions.",
         "No keyword ranking, search volume, or paid API research is performed.",

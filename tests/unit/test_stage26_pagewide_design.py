@@ -1,8 +1,9 @@
 """Stage 26: page-wide measurable design, truthful coverage and compact labels."""
-from pathlib import Path
 
 from pagecheck.acquisition.browser.visual_hierarchy import (
-    assess_heading_hierarchy, inspect_heading_hierarchy, make_design_review,
+    assess_heading_hierarchy,
+    inspect_heading_hierarchy,
+    make_design_review,
 )
 from pagecheck.application.use_cases.consolidate_audit import consolidate_audit
 from pagecheck.ui.components.hierarchy_indicator import design_category_badges
@@ -77,4 +78,4 @@ def test_optional_engine_reasons_explain_why_not_executed():
     reasons = report["engine_limitations"]
     assert "PAGECHECK_ALLOW_LOCAL_STATIC_ENGINES" in reasons["axe"][0]
     assert "sanitized HTML" in reasons["impeccable"][0]
-    assert "network isolation" in reasons["lighthouse"][0]
+    assert set(reasons) == {"axe", "impeccable"}

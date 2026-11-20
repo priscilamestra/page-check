@@ -1,11 +1,12 @@
 import json
 import subprocess
 from types import SimpleNamespace
-from pathlib import Path
+
 import pytest
+
 from pagecheck.application.use_cases.external_engines import combine_engines
-from pagecheck.integrations.engine_result import result
 from pagecheck.integrations.cli_runner import local_binary, run_local_json_command
+from pagecheck.integrations.engine_result import result
 
 
 def test_missing_binary(tmp_path):
@@ -50,11 +51,11 @@ def test_subprocess_timeout_isolated(tmp_path):
 def test_combiner_is_partial_when_one_engine_fails():
     x = combine_engines({"axe": result("axe")})
     assert x["status"] == "partial"
-    assert x["engines"]["lighthouse"]["status"] == "not_verified"
+    assert x["engines"]["impeccable"]["status"] == "not_verified"
 
 
 def test_combiner_all_available():
-    x = combine_engines({n: result(n) for n in ("lighthouse","axe","impeccable")})
+    x = combine_engines({n: result(n) for n in ("axe", "impeccable")})
     assert x["status"] == "completed"
 
 

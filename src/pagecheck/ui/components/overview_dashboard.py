@@ -11,7 +11,6 @@ from collections.abc import Mapping, Sequence
 from html import escape
 from typing import Any
 
-
 OVERVIEW_STYLES = """
 <style>
 .pc-kpis{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,.9fr) minmax(0,.9fr) minmax(0,1.35fr);gap:10px;margin:8px 0 24px}
@@ -141,12 +140,10 @@ def findings_html(rows: Sequence[Mapping[str, Any]]) -> str:
         return ""
     parts = ['<section class="pc-findings" aria-label="Priority findings">']
     for row in rows:
-        status = row.get("status")
-        issue = status == "failed"
-        label = "Issue" if issue else "Needs review"
         severity_name = str(row.get("severity") or "info").lower()
-        pill_style = ("issue" if issue else ("review-low" if severity_name in {"low", "info"} else "review"))
-        severity = _safe_text(str(row.get("severity") or "info").title(), 35)
+        severity = {"critical": "High", "high": "High", "medium": "Medium",
+                    "low": "Low", "info": "Low"}.get(severity_name, "Low")
+        pill_style = "issue" if severity == "High" else "review" if severity == "Medium" else "review-low"
         area = _safe_text(_area_label(row.get("area")), 70)
         count = _nonnegative(row.get("occurrences"))
         if count > 1:
@@ -159,7 +156,7 @@ def findings_html(rows: Sequence[Mapping[str, Any]]) -> str:
             + (f'<div class="pc-finding-summary">{recommendation}</div>' if recommendation else '')
             + f'<div class="pc-finding-meta">{area}</div></div>'
             f'<div><span class="pc-pill pc-pill-{pill_style}">'
-            f'{severity} · {label}</span></div></div>'
+            f'{severity}</span></div></div>'
         )
     parts.append('</section>')
     return "".join(parts)

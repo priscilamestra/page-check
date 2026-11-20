@@ -55,6 +55,23 @@ def destination_inventory_count(rows: list[dict[str, Any]]) -> int:
                if isinstance(row.get("inventory_items"), int))
 
 
+def link_audit_summary(report: Mapping[str, Any]) -> dict[str, int]:
+    raw = report.get("link_audit")
+    summary = raw.get("summary") if isinstance(raw, Mapping) else {}
+    if not isinstance(summary, Mapping):
+        summary = {}
+    return {
+        key: value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else 0
+        for key, value in {
+            "discovered": summary.get("discovered"),
+            "tested": summary.get("tested"),
+            "broken": summary.get("broken"),
+            "needs_review": summary.get("needs_review"),
+            "not_tested": summary.get("not_tested"),
+        }.items()
+    }
+
+
 def check_rows(report: Mapping[str, Any],
                describe: Callable[[dict[str, Any]], tuple[str, str | None]] | None = None
                ) -> list[dict[str, Any]]:

@@ -23,6 +23,7 @@ from pagecheck.ui.components.url_explorer import (
     destination_inventory_count,
     filter_rows,
     group_check_rows,
+    link_audit_summary,
 )
 
 # Small, narrowly scoped CSS: no global Streamlit/toolbar overrides.
@@ -128,14 +129,24 @@ def render_report(report: dict[str, Any], *, root: Path) -> None:
         params = campaign_parameters(report)
         rows = check_rows(report, describe=check_copy)
         destination_count = destination_inventory_count(rows)
-        pcols = st.columns(3)
+        pcols = st.columns(2)
         pcols[0].metric("Query parameters", params["total"])
         pcols[1].metric("UTM parameters", params["utm"])
-        pcols[2].metric("Link destinations", destination_count)
-        st.caption(
-            f"{len(rows)} diagnostic check records. Unvisited destinations are kept as "
-            "one inventory coverage limit, not counted as individual failures."
-        )
+        link_summary = link_audit_summary(report)
+        if any(link_summary.values()):
+            coverage = st.columns(5)
+            coverage[0].metric("Discovered", link_summary["discovered"])
+            coverage[1].metric("Tested", link_summary["tested"])
+            coverage[2].metric("Broken", link_summary["broken"])
+            coverage[3].metric("Needs review", link_summary["needs_review"])
+            coverage[4].metric("Not tested", link_summary["not_tested"])
+            st.caption("Internal destinations are checked with bounded, robots-aware GET requests.")
+        else:
+            st.metric("Link destinations", destination_count)
+            st.caption(
+                f"{len(rows)} diagnostic check records. Unvisited destinations are kept as "
+                "one inventory coverage limit, not counted as individual failures."
+            )
         if params["total"]:
             with st.expander(f"View {params['total']} URL parameter(s)"):
                 st.dataframe(params["parameters"], hide_index=True,

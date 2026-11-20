@@ -13,17 +13,6 @@ from typing import Any
 from pagecheck.ui.components.coverage_details import not_verified_by_area, source_rows
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
-SEO_LABELS = {
-    "SEO_TITLE": "Page title",
-    "SEO_DESCRIPTION": "Meta description",
-    "SEO_H1": "H1 heading",
-    "SEO_HEADING_ORDER": "Heading hierarchy",
-    "SEO_CANONICAL": "Canonical URL",
-    "SEO_NOINDEX": "Noindex directive",
-    "SEO_IMAGE_ALT": "Image alt text",
-}
-
-
 def _mapping(value: object) -> Mapping[str, Any]:
     return value if isinstance(value, Mapping) else {}
 
@@ -121,7 +110,7 @@ def source_counts(report: Mapping[str, Any]) -> dict[str, int]:
 
 
 def seo_keyword_groups(report: Mapping[str, Any]) -> dict[str, list[dict[str, str]]]:
-    """Explain scored SEO gaps and deterministic relevance-review candidates."""
+    """Show only user-supplied keyword opportunities backed by content checks."""
     groups: dict[str, list[dict[str, str]]] = {"missing_or_improve": [],
                                                 "review_relevance": []}
     for check in report.get("checks") or []:
@@ -131,47 +120,11 @@ def seo_keyword_groups(report: Mapping[str, Any]) -> dict[str, list[dict[str, st
         evidence = _mapping(check.get("evidence"))
         if check_id.startswith("SEO_TARGET_KEYWORD_") and check.get("status") == "warning":
             keyword = evidence.get("keyword")
-            locations = _mapping(evidence.get("locations"))
             if isinstance(keyword, str) and keyword.strip():
-                groups["missing_or_improve"].append({
-                    "term": keyword.strip(),
-                    "reason": ("Improve prominence" if locations.get("visible_copy") is True
-                               else "Missing from page copy"),
-                })
-    seo = _mapping(_mapping(_mapping(report.get("scores")).get("internal")).get("seo"))
-    breakdown = _mapping(seo.get("breakdown"))
-    for deduction in breakdown.get("deductions") or []:
-        if not isinstance(deduction, Mapping):
-            continue
-        check_id = str(deduction.get("check_id") or "")
-        label = SEO_LABELS.get(check_id)
-        lost = deduction.get("points_lost")
-        possible = deduction.get("weight")
-        if label and isinstance(lost, (int, float)) and isinstance(possible, (int, float)):
-            groups["missing_or_improve"].append({
-                "term": label,
-                "reason": f"{lost:g} of {possible:g} weighted points lost",
-            })
-    guidance = _mapping(report.get("seo_content_guidance"))
-    for candidate in guidance.get("relevance_candidates") or []:
-        if not isinstance(candidate, Mapping):
-            continue
-        term = candidate.get("term")
-        reason = candidate.get("reason")
-        if isinstance(term, str) and term.strip() and isinstance(reason, str):
-            groups["review_relevance"].append({"term": term.strip(), "reason": reason})
+                groups["missing_or_improve"].append({"term": keyword.strip()})
     for key, items in groups.items():
         groups[key] = list({item["term"].casefold(): item for item in items}.values())
     return groups
-
-
-def seo_score_explanation(report: Mapping[str, Any]) -> str:
-    seo = _mapping(_mapping(_mapping(report.get("scores")).get("internal")).get("seo"))
-    breakdown = _mapping(seo.get("breakdown"))
-    earned, possible = breakdown.get("points_earned"), breakdown.get("points_possible")
-    if not isinstance(earned, (int, float)) or not isinstance(possible, (int, float)) or not possible:
-        return ""
-    return f"Technical SEO score: {earned:g} of {possible:g} eligible weighted points earned."
 
 
 def count_label(value: int, singular: str, plural: str | None = None) -> str:

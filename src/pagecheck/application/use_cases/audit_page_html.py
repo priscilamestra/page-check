@@ -4,6 +4,7 @@ Não clica, não faz POST e não testa HTTP de links externos.
 """
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -17,6 +18,7 @@ from pagecheck.audits.seo.content_guidance import (
     normalize_keywords,
 )
 from pagecheck.audits.seo.rules import audit_seo
+from pagecheck.audits.seo.site_rules import audit_crawled_pages
 from pagecheck.audits.tracking.url_journey import inspect_url_journey
 from pagecheck.common.security.url_validation import validate_public_url
 from pagecheck.reporting.english_copy import englishize_report
@@ -25,6 +27,7 @@ from pagecheck.reporting.english_copy import englishize_report
 def audit_page_html(url: str, *, niche: str, objective: str,
                     language: str = "en", keywords: Sequence[str] | None = None,
                     fetch: Callable[[str], FetchedPage] = fetch_html,
+                    crawler: Callable[[FetchedPage], Mapping[str, Any]] | None = None,
                     visual_collector: Callable[[str], Mapping[str, Any]] | None = None,
                     external_collector: Callable[[str, str], Mapping[str, Any]] | None = None,
                     ) -> dict[str, Any]:
@@ -48,6 +51,35 @@ def audit_page_html(url: str, *, niche: str, objective: str,
                            if row["status"] in {"failed", "warning"})
     conversion = audit_conversion_html(page.html, page.final_url,
                                        niche=niche.strip(), objective=objective)
+    crawl_result: Mapping[str, Any] | None = None
+    if crawler is not None:
+        try:
+            candidate = crawler(page)
+            if not isinstance(candidate, Mapping):
+                raise TypeError("Crawler must return a mapping.")
+            crawl_result = candidate
+            crawl_checks = candidate.get("checks")
+            if isinstance(crawl_checks, list):
+                conversion["checks"].extend(
+                    row for row in crawl_checks if isinstance(row, Mapping)
+                )
+            pages = candidate.get("pages")
+            if isinstance(pages, list):
+                site_checks = audit_crawled_pages(
+                    [dict(row) for row in pages if isinstance(row, Mapping)]
+                )
+                seo["checks"].extend(site_checks)
+                seo["findings"].extend(
+                    row for row in site_checks if row["status"] in {"failed", "warning"}
+                )
+        except Exception as exc:  # noqa: BLE001 - limited crawl must not erase the page audit.
+            crawl_result = {
+                "status": "limited", "checks": [], "pages": [], "links": [],
+                "summary": {"discovered": 0, "tested": 0, "valid": 0, "broken": 0,
+                            "needs_review": 0, "not_tested": 0, "out_of_scope": 0,
+                            "pages_crawled": 0},
+                "limitations": [f"Limited crawl unavailable ({type(exc).__name__})."],
+            }
     # A regra legada TRACK_UTM olhava apenas a URL final e poderia contradizer
     # o diagnóstico da URL de entrada após um redirecionamento.
     conversion["checks"] = [
@@ -56,6 +88,9 @@ def audit_page_html(url: str, *, niche: str, objective: str,
     conversion["checks"].extend(inspect_url_journey(
         validated, page.final_url, page.redirects,
     ))
+    counts = Counter(item["status"] for item in conversion["checks"])
+    conversion["counts"] = {status: counts[status] for status in
+                            ("passed", "failed", "warning", "not_verified", "not_applicable")}
     visual_capture: Mapping[str, Any] | None = None
     if visual_collector is not None:
         try:
@@ -92,7 +127,7 @@ def audit_page_html(url: str, *, niche: str, objective: str,
             "limitations": [
                 (
                     "External checks analyze a sanitized snapshot from the same safe HTML fetch. "
-                    "They do not validate runtime behaviour, real Lighthouse performance, "
+                    "They do not validate runtime performance "
                     "or the original page's full visual design."
                 )
             ],
@@ -108,6 +143,8 @@ def audit_page_html(url: str, *, niche: str, objective: str,
         "relevance_candidates": guidance["relevance_candidates"],
         "limitations": guidance["limitations"],
     }
+    if crawl_result is not None:
+        report["link_audit"] = dict(crawl_result)
     report["http"] = {"status_code": page.status_code,
                       "redirect_count": len(page.redirects),
                       "redirects": list(page.redirects)}

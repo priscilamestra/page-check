@@ -12,14 +12,19 @@ from pagecheck.api.schemas.audit import PageAuditRequest
 from pagecheck.application.use_cases.audit_page_html import audit_page_html
 from pagecheck.application.use_cases.collect_public_visuals import collect_public_visuals
 from pagecheck.application.use_cases.collect_static_engines import collect_static_engines
-from pagecheck.common.security.admission import (AuditAdmissionError,
-                                                 production_audit_admission)
-from pagecheck.common.security.deployment import (is_local_development,
-                                                   live_browser_enabled, live_fetch_enabled)
-from pagecheck.common.security.private_api import require_private_service
-from pagecheck.common.security.isolated_audit import (
-    run_isolated_audit, verify_worker_python_exec, AuditIsolationUnavailable,
+from pagecheck.application.use_cases.crawl_public_site import crawl_public_site
+from pagecheck.common.security.admission import AuditAdmissionError, production_audit_admission
+from pagecheck.common.security.deployment import (
+    is_local_development,
+    live_browser_enabled,
+    live_fetch_enabled,
 )
+from pagecheck.common.security.isolated_audit import (
+    AuditIsolationUnavailable,
+    run_isolated_audit,
+    verify_worker_python_exec,
+)
+from pagecheck.common.security.private_api import require_private_service
 from pagecheck.common.security.url_validation import URLValidationError, validate_public_url
 
 router = APIRouter(prefix="/v1/audits", tags=["audit"])
@@ -31,7 +36,8 @@ def _execute_audit(payload: PageAuditRequest, request: Request) -> dict:
     if not is_local_development():
         require_private_service(request)
     url = validate_public_url(payload.url)
-    kwargs = {"niche": payload.niche, "objective": payload.objective}
+    kwargs = {"niche": payload.niche, "objective": payload.objective,
+              "crawler": crawl_public_site}
     if payload.language != "en" or payload.keywords:
         kwargs.update(language=payload.language, keywords=payload.keywords)
     wants_browser = live_browser_enabled()

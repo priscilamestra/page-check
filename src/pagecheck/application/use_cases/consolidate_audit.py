@@ -15,7 +15,7 @@ from pagecheck.reporting.consolidation.summary import (
     summarize_checks,
 )
 
-ENGINE_NAMES = ("lighthouse", "axe", "impeccable")
+ENGINE_NAMES = ("axe", "impeccable")
 VIEWPORT_NAMES = ("desktop", "mobile")
 
 
@@ -57,7 +57,7 @@ def consolidate_audit(
     """Converte resultados de fontes diferentes em DTO JSON serializável.
 
     - SEO é o único score interno preservado nesta fase.
-    - Lighthouse mantém suas notas originais e independentes.
+    - Motores auxiliares não são somados ao score técnico interno.
     - A falta de um motor resulta em `not_verified`, nunca em nota zero.
     - Achados de Playwright são apenas falhas/alertas: sua ausência não prova
       que a página passou em todas as verificações visuais.
@@ -122,7 +122,6 @@ def consolidate_audit(
     engine_data = external.get("engines", external) if external is not None else {}
     if not isinstance(engine_data, Mapping):
         raise TypeError("external.engines deve ser um objeto.")
-    lighthouse_scores: dict[str, Any] | None = None
     engine_limitations: dict[str, list[str]] = {}
     for engine in ENGINE_NAMES:
         item = _report(engine_data.get(engine), f"external.{engine}")
@@ -139,8 +138,6 @@ def consolidate_audit(
                     "impeccable": ("Optional Impeccable engine not requested. "
                                    "Local use requires PAGECHECK_ALLOW_LOCAL_STATIC_ENGINES=1; "
                                    "it only receives sanitized HTML without original CSS."),
-                    "lighthouse": ("Lighthouse was not run. Its separate Chrome session is "
-                                   "disabled for arbitrary public URLs until network isolation is available."),
                 }[engine] if external is None else
                       "Engine unavailable, not executed or output not confirmed."])
             continue
@@ -150,8 +147,6 @@ def consolidate_audit(
         engine_limitations[engine] = (
             [str(x) for x in item.get("limitations", [])]
             if isinstance(item.get("limitations"), list) else [])
-        if engine == "lighthouse" and isinstance(item.get("scores"), Mapping):
-            lighthouse_scores = dict(item["scores"])
 
     # IDs estáveis são preservados. IDs duplicados ganham sufixo determinístico,
     # sem descartar evidências de fontes ou viewports diferentes.
@@ -199,8 +194,7 @@ def consolidate_audit(
         "source_states": source_states,
         "summary": {**summary, "by_module": dict(sorted(by_module.items())),
                     "priority_count": len(priority)},
-        "scores": {"overall": None, "internal": {"seo": internal_seo},
-                   "lighthouse": lighthouse_scores},
+        "scores": {"overall": None, "internal": {"seo": internal_seo}},
         "findings": priority,
         "checks": checks,
         "actions_by_team": group_actions(priority),
@@ -209,7 +203,7 @@ def consolidate_audit(
         "engine_limitations": engine_limitations,
         "visual_limitations": visual_limitations,
         "limitations": [
-            "Sem score geral: as notas do Lighthouse não se somam às notas Page Check.",
+            "Sem score geral: o score técnico não representa ranking ou desempenho integral.",
             "Cobertura de checks reflete apenas regras recebidas e não comprova auditoria integral.",
             "Módulos não executados permanecem not_verified; ausência de achados não prova sucesso.",
         ],

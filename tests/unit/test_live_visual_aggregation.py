@@ -1,16 +1,15 @@
 """Stage 16D: no external networking, no false positives on blocked resources."""
 from __future__ import annotations
 
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
 
 from pagecheck.acquisition.http.fetcher import FetchedPage
-from pagecheck.application.use_cases.audit_page_html import audit_page_html
-from pagecheck.application.use_cases import collect_public_visuals as collector
 from pagecheck.api.app import app
+from pagecheck.application.use_cases import collect_public_visuals as collector
+from pagecheck.application.use_cases.audit_page_html import audit_page_html
 
 HTML = '''<html lang="en"><head><title>Example Product</title>
 <meta name="description" content="Purchase this example product"></head>
@@ -55,7 +54,7 @@ def test_html_fetch_once_and_visual_capture_receives_final_url():
     assert report['screenshots']['mobile']['annotated'].endswith('after_scroll_annotated.png')
     assert any(c['source'] == 'playwright' and c['viewport'] == 'mobile' for c in report['checks'])
     assert report['scores']['internal']['seo']['score'] is not None
-    assert report['scores']['lighthouse'] is None
+    assert 'lighthouse' not in report['scores']
     assert report['visual_capture']['errors']['desktop'] == 'offline'
 
 
@@ -169,7 +168,10 @@ def test_api_legacy_json_works_without_browser_flag(monkeypatch):
     monkeypatch.setenv('PAGECHECK_ALLOW_LIVE_FETCH', '1')
     monkeypatch.delenv('PAGECHECK_ALLOW_LIVE_BROWSER', raising=False)
     from pagecheck.api.routes import audit
-    monkeypatch.setattr(audit, 'audit_page_html', lambda url, **kwargs: {'requested_url': url, **kwargs})
+    def fake_audit(url, **kwargs):
+        kwargs.pop('crawler', None)
+        return {'requested_url': url, **kwargs}
+    monkeypatch.setattr(audit, 'audit_page_html', fake_audit)
     response = TestClient(app).post('/v1/audits/page', json={
         'url': 'https://example.com', 'niche': 'Technology', 'objective': 'leads'})
     assert response.status_code == 200

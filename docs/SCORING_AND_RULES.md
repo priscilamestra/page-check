@@ -1,54 +1,53 @@
-# Regras e scores — proposta v1.0
+# Regras e scores atuais
 
-## 1. Estados
+## Estados e cobertura
 
-- `passed`: verificação concluída e regra satisfeita.
-- `failed`: violação objetiva e reproduzível da regra.
-- `warning`: heurística, risco ou evidência parcial; exige revisão.
-- `not_verified`: execução inviável/bloqueada/erro/sem permissão; nunca sucesso.
-- `not_applicable`: regra não se aplica ao objetivo/página; fora do denominador.
+- `passed`: verificação concluída e satisfeita.
+- `failed`: violação objetiva e reproduzível.
+- `warning`: evidência que requer correção/revisão.
+- `not_verified`: execução incompleta; nunca sucesso.
+- `not_applicable`: fora do denominador.
 
-## 2. Severidade ≠ score
+`coverage = (passed + failed + warning) / (passed + failed + warning + not_verified)`.
 
-Severidade: `critical`, `high`, `medium`, `low`, `info`. A gravidade é usada para priorizar correções. Uma heurística estética não recebe automaticamente criticidade alta.
+## Technical SEO
 
-## 3. Cobertura
+O score usa somente as regras estruturais abaixo:
 
-`coverage = checks_executed / checks_applicable`, onde executados são `passed | failed | warning` e aplicáveis excluem `not_applicable`. `not_verified` permanece no denominador.
+| Regra | Peso |
+|---|---:|
+| Title | 3 |
+| Meta description | 2 |
+| H1 | 3 |
+| Ordem de headings | 1 |
+| Canonical | 2 |
+| Noindex, quando aplicável | 4 |
+| Alt de imagens | 1 |
 
-Exibir cobertura sempre ao lado do score, por exemplo `SEO: 80/100 — 8 de 10 regras executadas`.
+`passed` recebe o peso integral, `warning` metade e `failed` zero. `not_verified` não inventa pontos e reduz cobertura. O denominador contém apenas regras aplicáveis e verificáveis. O relatório preserva pontos ganhos, pontos possíveis e deduções.
 
-## 4. Score interno por área
+O número é conformidade técnica observada, não ranking Google, qualidade semântica total ou previsão de conversão.
 
-Cada regra possui `weight` versionado. Para regras executadas:
-- `passed` = 1,0 do peso;
-- `warning` = 0,5 do peso **somente se a regra definir penalização intermediária**; caso contrário, `warning` não pontua e a regra exibe alerta;
-- `failed` = 0.
+## Conteúdo e keywords
 
-`module_score = 100 × soma(pontos executados) / soma(pesos executados)` com cobertura exibida separadamente. Se nenhum check verificável, **sem nota**. Regra com `not_verified` não entra no numerador nem no denominador do score, porém reduz a cobertura. Se coverage abaixo do mínimo configurado (proposta inicial: 70%), destacar `nota parcial`, nunca apresentar como avaliação abrangente.
+A análise usa somente idioma, nicho, keywords fornecidas e HTML observado. Ela verifica frases exatas com comparação case/accent-insensitive e limites de palavra em:
 
-Não somar scores do Lighthouse com scores próprios em uma nota genérica. Primeira versão apresenta scores por área, e um índice geral opcional futuro só depois de documentar pesos e cobertura agregada.
+- title e meta description;
+- H1, H2 e H3;
+- conteúdo principal;
+- texto de âncoras;
+- alt de imagens.
 
-## 5. Exemplos de checks iniciais
+Header, nav, footer, aside, forms, scripts e templates são excluídos do corpo principal. Keyword ausente em shell JavaScript parcial fica `not_verified`. Keywords presentes apenas fora de áreas proeminentes geram orientação; keywords ausentes no HTML observado geram warning. Esses checks não alteram o Technical SEO.
 
-| ID | Área | Regra | Nível típico |
-|---|---|---|---|
-| SEO_TITLE | SEO | Title presente e não vazio | medium |
-| SEO_CANONICAL | SEO | Canonical consistente e válida, quando declarada | medium |
-| SEO_NOINDEX | SEO | `noindex` presente em página que deveria captar tráfego orgânico | high ou não aplicável conforme objetivo |
-| NAV_BROKEN_LINK | Navegação | GET de destino seguro retorna 404/410 | high |
-| CTA_UNRESOLVED | Conversão | CTA importante não possui destino/ação navegável verificável | warning / high conforme evidência |
-| IMG_BROKEN | Imagens | Recurso da imagem não carrega/decodifica após scroll | medium |
-| LAYOUT_OVERFLOW | Visual | Overflow horizontal detectado na viewport | medium |
-| TRACK_UTM_LOST | Tracking | URL com UTMs perde parâmetro no redirect | medium |
-| AXE_RULE | Acessibilidade | Violação reportada pelo axe-core | conforme impacto da regra |
+`Review relevance` permanece vazio quando não existe evidência determinística defensável. Termos comuns ou palavras do title/H1 não são classificados automaticamente como ruins.
 
-**Sem pontuação para:** estética subjetiva, número de palavras-chave do nicho como indicador de Google ranking, conversão de CRM não observada, mapa de calor comportamental e qualidade semântica de imagens de IA.
+## Crawl e regras multi-page
 
-## 6. Evidência obrigatória
+Links são descobertos pelo Scrapling e testados via GET protegido. 4xx/5xx confirmam destino quebrado; redirects ficam para revisão; fragments são comparados com `id`/`name`; limites e robots produzem `not_tested`.
 
-Cada finding com falha/alerta deve incluir pelo menos: `check_id`, `status`, `target_url`, `observed_value` ou erro registrado, `severity`, `recommendation`, `team` e `source` (motor/regra). Quando estiver associado a elemento renderizado, armazenar locator, viewport e bounding box (se disponível); adicionar screenshot marcado. Se a evidência faltar, usar `not_verified`.
+As regras adaptadas do jev-seo verificam títulos e meta descriptions duplicados entre páginas HTTP 200 crawleadas. Elas acrescentam findings com URLs e valores observados, mas não mudam o score técnico da página inicial.
 
-## 7. Versionamento
+## Motores e visuais
 
-Registrar `ruleset_version`, versões de Playwright/Chrome/Lighthouse/axe/Impeccable, viewport, timestamp, URL final e `audit_id`. Ao comparar auditorias, informar se versões/ambientes divergem.
+axe-core e Impeccable mantêm seus próprios findings e limitações. Screenshots/Playwright mantêm evidência de viewport. Nenhum desses resultados é somado a uma nota geral. Lighthouse não é fonte ativa.

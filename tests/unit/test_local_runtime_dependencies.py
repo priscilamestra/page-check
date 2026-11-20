@@ -1,7 +1,7 @@
 ﻿"""Regression tests for local runtime dependencies and security."""
 
-from pathlib import Path
 import tomllib
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -12,6 +12,15 @@ def test_html_parser_is_declared_as_runtime_dependency():
     )
     deps = project["project"]["dependencies"]
     assert any(dep.startswith("beautifulsoup4") for dep in deps)
+
+
+def test_crawl_and_browser_dependencies_are_declared():
+    project = tomllib.loads(
+        (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    deps = project["project"]["dependencies"]
+    assert any(dep.startswith("scrapling") for dep in deps)
+    assert any(dep.startswith("playwright") for dep in deps)
 
 
 def test_isolated_worker_runs_static_engines_inside_the_network_guard():

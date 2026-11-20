@@ -8,16 +8,13 @@ from __future__ import annotations
 import io
 import zipfile
 from base64 import b64decode
-from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
 from pagecheck.acquisition.http.fetcher import FetchedPage
 from pagecheck.api.app import app
 from pagecheck.api.routes import audit as audit_route
 from pagecheck.application.use_cases.audit_page_html import audit_page_html
-
 
 HTML = """<!doctype html><html lang="en"><head>
 <title>Project management software | Example</title>
@@ -73,6 +70,7 @@ def _configure_offline_pipeline(monkeypatch, tmp_path, *, with_visuals=True):
                 'mode': 'guarded_static_no_javascript', 'errors': {}}
 
     def injected_audit(url, **kwargs):
+        kwargs["crawler"] = None
         return audit_page_html(url, fetch=fake_fetch, **kwargs)
 
     monkeypatch.setattr(audit_route, 'audit_page_html', injected_audit)
@@ -100,7 +98,7 @@ def test_full_audit_save_reopen_zip_without_refetch(tmp_path, monkeypatch):
     assert report['source_states']['seo'] == 'completed'
     assert report['source_states']['conversion'] == 'completed'
     assert set(report['screenshots']) == {'desktop', 'mobile'}
-    assert report['scores']['lighthouse'] is None
+    assert 'lighthouse' not in report['scores']
     assert all(v == 'not_verified' for v in report['source_states']['engines'].values())
     assert report['status'] == 'partial'
     assert report['audit_context']['keywords'] == PAYLOAD['keywords']

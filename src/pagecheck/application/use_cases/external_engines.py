@@ -6,7 +6,7 @@ from typing import Any
 
 from pagecheck.integrations.engine_result import unavailable
 
-ENGINES = ("lighthouse", "axe", "impeccable")
+ENGINES = ("axe", "impeccable")
 
 
 def combine_engines(reports: dict[str, dict[str, Any]]) -> dict:
@@ -23,6 +23,5 @@ def combine_engines(reports: dict[str, dict[str, Any]]) -> dict:
                    else "partial" if counts["completed"] else "not_verified"),
         "engines": normalized,
         "counts": {"completed": counts["completed"], "not_verified": counts["not_verified"]},
-        "notes": ["Pontuações Lighthouse são independentes do score Page Check.",
-                  "Motores não executados não geram resultados positivos nem nota zero."],
+        "notes": ["Motores não executados não geram resultados positivos nem nota zero."],
     }

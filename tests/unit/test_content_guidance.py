@@ -45,22 +45,18 @@ def test_body_only_keyword_is_guidance_not_a_penalty_claim():
                                     language="es", niche="Marketing", keywords=["campañas"])
     check = data["checks"][1]
     assert check["status"] == "warning"
-    assert check["evidence"]["locations"]["visible_copy"] is True
+    assert check["evidence"]["locations"]["main_content"] is True
     assert check["evidence"]["locations"]["title"] is False
 
 
-def test_prominent_terms_outside_supplied_context_are_review_candidates():
+def test_common_prominent_terms_are_not_declared_irrelevant():
     html = """<html lang='en'><head><title>Welcome to Python</title></head>
               <body><h1>Developer resources</h1><p>Python documentation.</p></body></html>"""
     data = inspect_content_guidance(
         html, parse_html(html, "https://python.example"), language="en",
         niche="Software programming", keywords=["python"],
     )
-    assert [item["term"].casefold() for item in data["relevance_candidates"]] == [
-        "welcome", "developer", "resources",
-    ]
-    assert all("outside the supplied niche" in item["reason"]
-               for item in data["relevance_candidates"])
+    assert data["relevance_candidates"] == []
 
 
 def test_supplied_target_terms_are_never_relevance_candidates():
@@ -70,6 +66,48 @@ def test_supplied_target_terms_are_never_relevance_candidates():
         niche="Software programming", keywords=["python"],
     )
     assert data["relevance_candidates"] == []
+
+
+def test_compound_keyword_records_each_observed_area_and_examples():
+    html = """<html lang='en'><head><title>Growth automation platform</title>
+              <meta name='description' content='Growth automation for teams'></head>
+              <body><nav>Growth automation</nav><main><h1>Growth automation</h1>
+              <h2>Build reliable workflows</h2><p>Our growth automation platform helps.</p>
+              <img src='x.png' alt='Growth automation dashboard'></main></body></html>"""
+    check = inspect_content_guidance(
+        html, parse_html(html, "https://example.com"), language="en",
+        niche="Marketing", keywords=["growth automation"],
+    )["checks"][1]
+    assert check["status"] == "passed"
+    assert check["evidence"]["locations"] == {
+        "title": True, "description": True, "h1": True, "h2": False,
+        "h3": False, "main_content": True, "anchors": False, "image_alt": True,
+    }
+    assert "main_content" in check["evidence"]["examples"]
+
+
+def test_navigation_only_keyword_is_not_treated_as_main_content():
+    html = """<html lang='en'><head><title>Home</title></head><body>
+              <nav><a href='/sales'>Sales automation</a></nav>
+              <main><h1>Welcome</h1><p>Product information for teams.</p></main></body></html>"""
+    check = inspect_content_guidance(
+        html, parse_html(html, "https://example.com"), language="en",
+        niche="Software", keywords=["sales automation"],
+    )["checks"][1]
+    assert check["status"] == "warning"
+    assert check["evidence"]["locations"]["anchors"] is True
+    assert check["evidence"]["locations"]["main_content"] is False
+
+
+def test_partial_application_shell_does_not_confirm_keyword_absence():
+    html = """<html lang='en'><head><title>App</title><script src='/app.js'></script></head>
+              <body><div id='root'>Loading</div></body></html>"""
+    check = inspect_content_guidance(
+        html, parse_html(html, "https://example.com"), language="en",
+        niche="Software", keywords=["workflow automation"],
+    )["checks"][1]
+    assert check["status"] == "not_verified"
+    assert check["evidence"]["partial_html"] is True
 
 
 def test_word_boundary_avoids_false_positive():

@@ -2,7 +2,6 @@
 
 No external engine receives a live URL. This module operates only on a
 sanitized, bounded *snapshot* of HTML already fetched through safe_transport.
-Lighthouse remains unverified because its Chrome bypasses the pinned transport.
 Do not enable this in a public deployment without a dedicated sandbox.
 """
 from __future__ import annotations
@@ -135,13 +134,7 @@ def collect_static_engines(
     """Collect safe-ish local static diagnostics, never navigate tools to URL."""
     validate_public_url(final_url)
     safe = sanitize_static_html(html)
-    reports = {
-        "lighthouse": unavailable(
-            "lighthouse",
-            "Not run on public URLs: Lighthouse launches its own network-enabled Chrome. "
-            "Use the trusted localhost fixture test until network isolation exists.",
-        ),
-    }
+    reports = {}
     for engine, runner in (("axe", axe_runner), ("impeccable", impeccable_runner)):
         try:
             report = runner(safe, root=Path(root))

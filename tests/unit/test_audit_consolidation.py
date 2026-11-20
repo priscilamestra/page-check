@@ -41,12 +41,6 @@ def _conversion():
 
 def _external():
     return {"engines": {
-        "lighthouse": {"engine": "lighthouse", "status": "completed",
-                       "scores": {"seo": 91, "performance": 99}, "findings": [
-                           {"id": "lh:t", "source": "lighthouse", "module": "technical",
-                            "status": "warning", "severity": "high", "title": "Lighthouse warning",
-                            "evidence": {"audit_id": "t"}, "owner": "Frontend"},
-                       ], "limitations": []},
         "axe": {"engine": "axe", "status": "completed", "findings": [], "limitations": []},
         "impeccable": {"engine": "impeccable", "status": "completed", "findings": [],
                        "limitations": ["Requer revisão humana"]},
@@ -61,8 +55,7 @@ def _base(**kwargs):
 def test_no_sources_is_partial_and_unverified():
     report = _base()
     assert report["status"] == "partial"
-    assert report["scores"] == {"overall": None, "internal": {"seo": None},
-                                 "lighthouse": None}
+    assert report["scores"] == {"overall": None, "internal": {"seo": None}}
     assert report["source_states"]["engines"]["axe"] == "not_verified"
     assert report["source_states"]["visuals"]["mobile"] == "not_verified"
     assert report["summary"]["check_coverage"]["ratio"] is None
@@ -71,7 +64,6 @@ def test_no_sources_is_partial_and_unverified():
 def test_score_sources_are_separate():
     report = _base(seo=_seo(), external=_external())
     assert report["scores"]["internal"]["seo"]["score"] == 75.0
-    assert report["scores"]["lighthouse"]["seo"] == 91
     assert report["scores"]["overall"] is None
     assert report["scores"]["internal"]["seo"]["ruleset_version"] == "seo-1.0.0"
     assert report["scores"]["internal"]["seo"]["breakdown"]["points_possible"] == 12
@@ -87,10 +79,10 @@ def test_conversion_not_verified_not_counted_as_passed():
 
 def test_findings_are_prioritized_and_grouped():
     report = _base(seo=_seo(), external=_external())
-    assert [f["severity"] for f in report["findings"]] == ["high", "medium"]
+    assert [f["severity"] for f in report["findings"]] == ["medium"]
     teams = {g["team"] for g in report["actions_by_team"]}
-    assert "SEO / Conteúdo" in teams and "Frontend" in teams
-    assert report["summary"]["priority_count"] == 2
+    assert teams == {"SEO / Conteúdo"}
+    assert report["summary"]["priority_count"] == 1
 
 
 def test_visual_coordinates_and_viewport_preserved():
@@ -192,15 +184,16 @@ def test_fully_completed_sources_without_unknown_checks():
         external=_external(),
     )
     assert report["status"] == "completed"
-    assert report["summary"]["counts"]["warning"] == 1  # Lighthouse finding
+    assert report["summary"]["counts"]["warning"] == 0
     # Completed significa dados recebidos, não resultado sem defeitos.
 
 
-def test_missing_engine_scores_not_zero():
+def test_removed_lighthouse_is_not_an_active_source_or_score():
     report = _base(external={"engines": {"lighthouse": {
-        "engine": "lighthouse", "status": "not_verified", "scores": {"seo": 0},
-        "limitations": ["timeout"]}}})
-    assert report["scores"]["lighthouse"] is None
+        "engine": "lighthouse", "status": "completed", "scores": {"seo": 99},
+        "findings": [], "limitations": []}}})
+    assert "lighthouse" not in report["scores"]
+    assert "lighthouse" not in report["source_states"]["engines"]
 
 
 def test_source_findings_cannot_be_a_string():

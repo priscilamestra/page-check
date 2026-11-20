@@ -15,7 +15,6 @@ SOURCE_DEFINITIONS = (
     ("mobile", "Mobile screenshot", "Guarded JavaScript rendering; no clicks or submissions."),
     ("axe", "Accessibility (axe-core)", "Static HTML semantics only; not full WCAG testing."),
     ("impeccable", "Design (Impeccable)", "Sanitized HTML heuristics; runtime layout still needs visual review."),
-    ("lighthouse", "Performance (Lighthouse)", "Public-URL Chrome execution is disabled for safety."),
 )
 
 STATUS_LABELS = {
@@ -64,7 +63,7 @@ def source_rows(report: Mapping[str, Any]) -> list[dict[str, str]]:
             if not reason and status == "not_verified":
                 reason = ("Browser capture was not requested for this audit."
                           if not visual_capture else "No browser result or reason was recorded.")
-        elif key in {"axe", "impeccable", "lighthouse"}:
+        elif key in {"axe", "impeccable"}:
             notes = engine_notes.get(key)
             if isinstance(notes, list):
                 valid_notes = [v for v in notes if isinstance(v, str) and v.strip()]

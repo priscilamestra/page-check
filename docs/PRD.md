@@ -1,161 +1,187 @@
-# PRD — Page Check
+# Page Check — PRD v1.5 local finalizado
 
-**Versão:** 1.2 | **Atualizado:** 19/11/2026 | **Status:** versão final validada e publicada no ambiente de produção | **Repositório:** independente do Stock.
+**Atualizado:** 20/11/2026
+**Status:** implementação local concluída e validada no Windows
+**Base:** commit local `3d66b6b`; alterações posteriores ainda sem commit/push
+**Escopo:** aplicação local de portfólio; sem Docker, Render, Neon ou deploy
 
-## 1. Resumo
+## 1. Objetivo
 
-Aplicação local de auditoria técnica, funcional e visual de landing pages públicas para profissionais de marketing, growth e GTM. O usuário informa URL, nicho e objetivo. O sistema abre a página, analisa HTML e rede, percorre a página, executa verificações determinísticas, registra capturas desktop/mobile e apresenta **problemas localizados e ações por equipe**. Sem IA generativa e sem API paga obrigatória.
+O Page Check recebe URL pública, nicho, objetivo, idioma e keywords e produz uma auditoria determinística de SEO on-page, conteúdo, links, navegação, acessibilidade estática, design heurístico e evidências desktop/mobile.
 
-## 2. Problema e proposta de valor
+Não usa IA generativa, pesquisa de keywords paga ou serviços hospedados obrigatórios. Não promete ranking Google, volume de busca, conversão real, Core Web Vitals de campo, pentest ou WCAG completa.
 
-Landing pages podem perder oportunidades por links quebrados, CTAs sem destino, imagens que falham durante scroll, problemas de SEO técnico, layout mobile inconsistente, ausência de rastreamento ou acessibilidade básica. O usuário não precisa ler uma auditoria textual extensa: vê a página marcada com problemas, uma tabela curta de prioridades e evidências reproduzíveis.
+## 2. Funcionalidades entregues
 
-**Público principal:** freelancers de marketing/growth, GTM Engineers, profissionais de conteúdo/SEO, times de aquisição e QA de landing pages.
+### 2.1 SEO técnico e conteúdo
 
-**Casos de uso:** auditoria antes de publicar uma campanha; diagnóstico de uma página pública; comparação antes/depois após correção; handoff para SEO, Design, Frontend, Growth/Tracking ou QA.
+- Score **Technical SEO** preservado e independente, com pesos e breakdown rastreáveis.
+- Title, description, H1, ordem de headings, canonical, noindex e alt continuam sendo regras técnicas.
+- Idioma, nicho e keywords informadas participam dos checks de conteúdo.
+- Expressões compostas são verificadas em title, meta description, H1/H2/H3, conteúdo principal, âncoras e alt.
+- Nav, header, footer, aside, forms, scripts e templates não contam como conteúdo principal.
+- HTML que parece um shell JavaScript parcial não comprova ausência; o resultado fica `not_verified`.
+- Keywords presentes, pouco proeminentes ou ausentes têm regra, localização, exemplos observados e recomendação.
+- Termos comuns e palavras do title/H1 não viram automaticamente “irrelevantes”.
+- Trocar keywords altera somente os checks de conteúdo, sem manipular o score técnico.
 
-## 3. Princípios inegociáveis
+### 2.2 Crawler e links
 
-1. Resultado determinístico e explicável: cada achado contém regra, evidência e recomendação. Nada de recomendações geradas por LLM.
-2. Nunca atribuir 100% a testes não executados. Status permitidos: `passed`, `failed`, `warning`, `not_verified`, `not_applicable`.
-3. Score próprio de conformidade **não** equivale a ranking Google, sucesso comercial ou probabilidade de conversão; Lighthouse aparece separadamente.
-4. Sem ações invasivas, login, envio real de formulário, bypass de bloqueios ou crawling de área privada.
-5. Componentes isolados; falha de um adapter não derruba as demais auditorias. Toda dependência de CLI externa tem timeout, versão fixada, logs e fallback `not_verified`.
-6. Não coletar dados pessoais desnecessários; guardar evidências com retenção controlada.
-7. Streamlit apresenta resultados, não executa lógica de negócio; FastAPI oferece API; o núcleo Python independe da UI.
+- Scrapling participa de forma real por `scrapling.Selector` na descoberta de links e preserva selector/HTML do elemento.
+- BeautifulSoup continua responsável pelo parsing estrutural e pela verificação de fragments.
+- Toda rede usa o transporte protegido do Page Check; nenhum fetcher/spider do Scrapling acessa a rede.
+- Crawl sequencial, GET-only, limitado ao mesmo host, robots-aware e com tetos explícitos:
+  - 20 páginas;
+  - profundidade 2;
+  - 200 links;
+  - 90 segundos por padrão, configurável localmente até 600;
+  - 2 MB por recurso;
+  - concorrência 1.
+- Registra origem, href, URL resolvida/final, texto, selector, HTML, status HTTP, redirects, fragment, ocorrências e limitação.
+- Distingue `discovered`, `tested`, `valid`, `broken`, `needs_review`, `not_tested` e `out_of_scope`.
+- 4xx/5xx confirma link quebrado; redirect vira revisão; fragment ausente é falha; limite/robots/erro fica não testado com causa.
+- Links externos não são acessados.
+- Limites de páginas e profundidade controlam somente a expansão do crawl; não impedem a verificação de destinos internos já descobertos.
+- Formulários, contas, compras, POST e demais ações de escrita nunca são executados.
 
-## 4. Entrada e fluxos
+### 2.3 Regras adaptadas do jev-seo
 
-### 4.1 Campos obrigatórios
-- **URL** pública `http://` ou `https://`, validada e normalizada.
-- **Nicho:** texto livre curto, contextual (ex.: nutrição, SaaS B2B). Não é usado para fabricar uma pontuação de relevância sem referência externa.
-- **Objetivo:** `leads | meetings | sales | signup | organic_traffic`.
+Duas regras determinísticas ausentes foram adaptadas ao contrato Page Check:
 
-### 4.2 Fluxo principal
-1. Validar URL e segurança do destino/redirects.
-2. Criar auditoria com `audit_id`, data/hora, regras/versionamento, viewport e configurações.
-3. Coletar HTML inicial com HTTPX + BeautifulSoup.
-4. Abrir browser Playwright (desktop e mobile), observar rede, fazer scroll incremental e capturar screenshots com coordenadas.
-5. Executar os módulos independentes; opcionalmente executar Lighthouse, axe-core e detector Impeccable via adapters isolados.
-6. Normalizar todos os achados em um contrato único; calcular status, score e cobertura por módulo.
-7. Desenhar anotações nas capturas (Pillow) e montar relatório compacto.
-8. Em desenvolvimento, persistir no SQLite; em produção, permitir somente recuperação privada temporária por token opaco por até 24 horas.
-9. Exportar HTML + imagens (ZIP), CSV/JSON (resultados tabulares).
+1. títulos duplicados entre páginas crawleadas;
+2. meta descriptions duplicadas entre páginas crawleadas.
 
-### 4.3 Interface MVP
-- **Auditar página:** formulário 3 campos, botão Auditar, aviso de limites.
-- **Resultados:** resumo visual com status/score/cobertura, screenshot desktop/mobile anotado, lista curta de problemas por severidade, filtro por equipe e detalhes expandidos por achado.
-- **Recuperação:** nenhum histórico público. Em produção, o navegador guarda somente um token opaco para restaurar a última auditoria por até 24 horas.
+Elas usam somente páginas HTTP 200 observadas, agrupam valor e URLs, têm severidade/recomendação e não usam Jev, TypeSafe, DataForSEO, modelo ou score do projeto externo. Não alteram o score técnico da página inicial.
 
-## 5. Requisitos funcionais
+### 2.4 Motores e capturas
 
-| ID | Prioridade | Requisito | Aceite mínimo |
-|---|---|---|---|
-| FR-01 | P0 | Validar URL e bloquear destinos perigosos | IPs privados/loopback, esquemas proibidos e redirects bloqueados não são acessados |
-| FR-02 | P0 | Coletar HTML público | Title, meta description, headings, canonical, robots, links, imagens, formulários normalizados |
-| FR-03 | P0 | Executar navegador real | Desktop e mobile, timeouts, screenshot antes/depois do scroll, logs de rede |
-| FR-04 | P0 | Inspecionar lazy loading | Detalhar quais imagens foram carregadas durante scroll e quais permaneceram falhas/incompletas; exceções marcadas |
-| FR-05 | P0 | Auditar links e CTAs sem alterar dados | HTTP/redirects e navegação GET permitida; elementos que acionam POST ficam `not_verified` |
-| FR-06 | P0 | Inspecionar formulários | Identificar campos, rótulos, HTML validation, action; não submeter a produção |
-| FR-07 | P0 | Auditoria técnica SEO | Checks com critérios explícitos e evidências; sem previsão SERP |
-| FR-08 | P0 | Inspecionar imagens/layout | URLs, dimensões, alt, decode, viewport overflow e elementos sobrepostos em casos verificáveis |
-| FR-09 | P0 | Validar UTMs e indícios de tracking | Checagem de parâmetros, redirects e presença de tags/requisições observadas; não afirmar conversão ou coleta completa |
-| FR-10 | P0 | Integrar axe-core | Retornar violações e status não verificado se ferramenta falhar |
-| FR-11 | P0 | Integrar Lighthouse local | Exibir scores originais separados dos próprios e informar ambiente de execução |
-| FR-12 | P0 | Consolidar relatório | Achados por área/status/severidade/equipe, com evidência clicável e anotações na imagem |
-| FR-13 | P0 | Recuperação e exportação | SQLite local; recuperação privada temporária em produção; PNG + JSON/CSV e relatório HTML via ZIP |
-| FR-14 | P1 condicional | Adapter Impeccable detector | Usar CLI `detect --json` sem LLM, após smoke test no Windows; se indisponível, demais testes prosseguem |
-| FR-15 | P1 | Histórico antes/depois | Comparar dois `audit_id` do mesmo alvo com regras compatíveis |
-| FR-16 | P1 | Comparação de múltiplas URLs | Aplicar mesmo perfil de auditoria e comparar indicadores com Pandas |
-| FR-17 | P1 | Revisão visual avançada | Heurísticas de inconsistência tipográfica e espaçamento, sem impor estilo subjetivo |
+- Playwright renderiza desktop/mobile com JavaScript e interceptação GET guardada.
+- POST, WebSocket, downloads, service workers e sockets diretos permanecem bloqueados.
+- axe-core executa sobre HTML estático sanitizado e declara esse limite.
+- Impeccable executa sobre HTML estático sanitizado e declara esse limite.
+- Screenshots, marcadores, categorias, detalhes e downloads foram preservados.
 
-**Nota:** requisitos P0 são o escopo da versão 1.0 final; a implementação ocorrerá em incrementos para não bloquear entrega por dependências externas.
+### 2.5 Decisão Lighthouse
 
-## 6. Regras por módulo
+Foi aplicada a opção **C: remoção do produto ativo**.
 
-### SEO técnico
-- Title e description presentes e não vazios; comprimento como alerta heurístico, não como fator absoluto de ranking.
-- Heading H1, hierarquia H2/H3 e duplicações suspeitas (sem dizer que todo H1 duplicado é erro definitivo).
-- Canonical, meta robots, idioma HTML, links internos, URL final após redirects.
-- Lighthouse SEO: score original em painel separado; falha do CLI = `not_verified`.
+Causa: o Lighthouse abre Chrome próprio e suas requisições não passam pelo transporte protegido do Page Check. Permiti-lo em URLs públicas exigiria afrouxar a garantia de rede ou criar outra camada de isolamento fora do escopo local.
 
-### Performance e rede
-- Requisições e status observados; falhas de recurso, console erros com contexto e contagem limitada.
-- Lighthouse performance e Core Web Vitals laboratoriais: indicar teste de laboratório; não confundir com dados reais de usuários.
-- Sem inferir causas completas de lentidão apenas pelo tamanho de arquivo ou tempo local.
+Consequência aplicada:
 
-### Imagens e scroll
-- Antes/ao entrar/depois da viewport: `complete`, `naturalWidth`, `currentSrc`, falhas HTTP, espaços reservados e screenshots por seção.
-- Lazy loading é avaliado pelo resultado observado, não só pelo atributo `loading=lazy`.
-- Sinalizar imagem com dimensionamento problemático ou overflow apenas com medidas registradas; aspecto visual/erros em imagens de IA exigem revisão humana.
+- não aparece na UI;
+- não entra em `Sources completed`;
+- não entra em scores, cobertura ou exportações;
+- README/API/arquitetura não o apresentam como motor disponível;
+- adapter e fixture históricos podem permanecer no código apenas como legado inativo.
 
-### Navegação/CTAs/formulários
-- Identificar CTA por semântica verificável (`a`, `button`, role, texto, posição). Não garantir se é persuasivo.
-- Verificar destino/link ou abertura segura; nenhum click capaz de criar lead, comprar, excluir ou disparar ação irreversível.
-- Formulários: método/action, labels, required, validações nativas; não testar envio sem ambiente autorizado.
+### 2.6 Relatório e interface
 
-### Rastreamento
-- Verificar sintaxe e consistência de UTMs quando URL de entrada possuir campanha ou quando houver links com UTMs.
-- Verificar preservação em redirects; detectar scripts/requests observáveis de analytics sem afirmar que eventos funcionam do início ao fim.
-- Ausência de UTM em acesso orgânico direto não é falha automática.
+- Overview, URLs & parameters, Issues e Export consomem os resultados reais.
+- URLs mostra descobertos, testados, quebrados, redirects para revisão e não testados.
+- Issues preserva problema, estado, severidade, evidência, selector/HTML/localização e recomendação.
+- Duplicatas são agregadas no resumo sem apagar os checks completos.
+- **Missing or improve** e **Review relevance** contêm somente chips; ficam vazios sem evidência defensável.
+- Checks técnicos nunca viram chips de keyword.
+- **Fix these first** mostra apenas `High`, `Medium` ou `Low`.
+- A mensagem visual `Audit saved to local history (<id>)` foi removida; persistência e erros reais foram mantidos.
+- Persistência local SQLite e restauração por `audit_id` continuam ativas.
+- Exportações JSON, CSV e ZIP com HTML/screenshots continuam ativas.
 
-### Layout, UX e acessibilidade
-- Desktop/mobile: overflow horizontal, conteúdo fora da viewport, links/botões com problemas de alvo, itens com sobreposição material verificável.
-- axe-core para regras de acessibilidade automatizáveis.
-- Tipografia, distâncias e diferenças de tamanho: inconsistência sinalizada como `warning`, não falha determinística universal.
-- Impeccable detector pode gerar achados adicionais **somente depois** de testar CLI, licença, formato JSON e estabilidade no Windows; não requisita agente.
+## 3. Segurança
 
-## 7. Saída e visualização
+- URL inicial e cada redirect passam pela política de destino público.
+- Localhost, redes privadas, link-local, metadata, credenciais em URL e destinos não públicos são bloqueados.
+- Transporte fixa o destino validado e limita redirects, tempo e bytes.
+- Crawler e browser são somente leitura; nenhum método de escrita é enviado a terceiros.
+- Serviços locais devem permanecer em `127.0.0.1`.
+- Relatórios podem conter URLs e trechos de HTML; `data/local/` e `artifacts/` ficam fora do Git.
 
-- Topo: URL, nicho, objetivo, horário, viewport, status geral, cobertura (`regras executadas / regras aplicáveis`) e contagem de achados por severidade.
-- **Scores por módulo** 0–100 apenas quando houver regras verificadas; se não, `sem nota`. Nunca esconder cobertura reduzida.
-- **Lighthouse**: scores originais Performance/SEO/Acessibilidade/Boas práticas em bloco próprio, rotulado laboratório.
-- Screenshot anotado: marcadores numerados e cor por severidade; selecionar marcador abre achado com evidência e equipe sugerida.
-- Achados: título curto, regra, prova (URL/selector/coordenadas/código HTTP), impacto potencial sem promessa de conversão, ação, equipe.
-- Exportações: relatório HTML com assets PNG empacotados no ZIP, `findings.csv`, `audit.json` e screenshots; sem textos longos desnecessários.
+## 4. Estados e interpretação
 
-## 8. O que fica fora
+- `passed`: regra executada e satisfeita.
+- `failed`: falha objetiva confirmada.
+- `warning`: evidência que requer correção/revisão.
+- `not_verified`/`not_tested`: cobertura indisponível ou limitada; não é defeito.
+- `not_applicable`: regra fora do caso.
 
-- IA generativa, visão computacional para entender semântica de imagens, correção automática de copy, heatmaps reais de visitantes.
-- Ranking Google, volume real de palavras-chave e suposta probabilidade de conversão.
-- Descoberta/teste de APIs privadas desconhecidas, login e submissão de formulários reais.
-- Scan massivo de domínios, pentest, fuzzing, bypass de robots/captcha, scraping autenticado.
-- CRM, integração de leads, Supabase, multi-tenancy e notificações no MVP.
+O score Technical SEO mede somente regras técnicas elegíveis. Findings de conteúdo, crawler, axe, Impeccable e Playwright não são somados em uma nota geral arbitrária.
 
-## 9. Segurança e privacidade
+## 5. Aceite validado
 
-- HTTPS/HTTP apenas; bloquear localhost, loopback, IPs privados, link-local, cloud metadata e DNS/redirects que resolvam para destinos internos, inclusive recursos do navegador, com proteção contra rebinding.
-- Produção usa worker sem sockets IPv4/IPv6 diretos e broker AF_UNIX para GETs públicos validados; o `render.yaml` permanece desabilitado até os smoke tests.
-- Limites configuráveis de tempo, bytes, requests, scroll, browser contexts, concorrência e profundidade; não seguir links indiscriminadamente.
-- Não executar downloads, envios ou scripts fornecidos como entrada pelo usuário. Scripts pertencentes à página podem renderizar sob orçamento GET, sem WebSocket, serviço de background ou socket direto.
-- Redigir dados sensíveis encontrados em URL/relatórios/logs; sanitizar HTML antes de exibir; evitar armazenar cookies e tokens.
-- Respeitar restrições aplicáveis dos sites, robots quando apropriado ao modo de coleta, e documentar limitações de sites que bloqueiem automação.
+| Requisito | Evidência executada | Status |
+|---|---|---|
+| Keywords presente/ausente/composta e HTML parcial | testes de `content_guidance` | concluído |
+| Termos comuns e score técnico separados | testes de conteúdo/Overview | concluído |
+| Scrapling real sem rede própria | testes do adapter + crawl real | concluído |
+| Link 200, 404, redirect, fragment, robots e limite | testes de `crawl_public_site` e `fetch_resource` | concluído |
+| Bloqueio de redirect privado e GET-only | testes de transporte/segurança | concluído |
+| Duas regras jev-seo | testes de `site_rules` | concluído |
+| Overview/URLs/Issues/Evidence/Screenshots | inspeção visual Streamlit em auditoria real | concluído |
+| Chips, prioridades e salvamento silencioso | testes unitários + inspeção visual | concluído |
+| Lighthouse com desfecho A/B/C | opção C aplicada e testada | concluído |
+| axe/Impeccable com escopo fiel | execução real sobre snapshot sanitizado | concluído |
+| Persistência e exportação | SQLite + JSON/CSV/ZIP 200 | concluído |
+| Regressão | `594 passed, 1 warning` | concluído |
 
-## 10. Requisitos não funcionais
+## 6. Auditoria pública de validação
 
-- Local-first no Windows, Python + `uv` (se adotado), Node/Chrome apenas para Lighthouse/Impeccable, sem API paga.
-- Regras auditáveis, versões fixadas e logs por auditoria.
-- Pasta temporária isolada por `audit_id`, limpeza em falhas e encerramento obrigatório do browser.
-- API acessível localmente pela UI; componentes desacoplados com contratos Pydantic.
-- Layout simples e legível no Streamlit, sem gráficos redundantes com amostras pequenas.
-- Testes unitários para regras, integração para API/SQLite/adapters e E2E para uma landing page fictícia com defeitos conhecidos.
+Alvo autorizado: `https://www.python.org/`
+Entrada: nicho `Software development`, idioma `en`, keywords `python programming` e `python documentation`.
 
-## 11. Definição de pronto (v1.0)
+Resultado observado na API:
 
-1. Auditar URL pública e renderizar desktop/mobile, incluindo caso de JS e lazy loading.
-2. Detectar erros conhecidos da página fixture de teste com evidência, regra e responsável.
-3. Gerar scores próprios com cobertura correta, manter scores Lighthouse separados e não pontuar `not_verified`.
-4. Exportar HTML/PNG/CSV/JSON e recuperar auditoria do SQLite.
-5. UI Streamlit chama API real; nenhum botão decorativo/falso.
-6. `pytest` unit/integration/E2E aprovados em ambiente documentado; smoke test Windows das CLIs aplicáveis.
-7. Proteções de URL, redirects, recursos de subnavegação e limites confirmadas por testes negativos.
-8. README reproduz o fluxo de instalação/execução, com limitações reais e demonstração.
-9. Detector Impeccable não bloqueia release se a integração ainda não estiver validada: fica P1 condicional registrada.
+- HTTP 200;
+- Technical SEO 79 no fluxo completo com as duas keywords;
+- 200 links internos descobertos;
+- 200 testados;
+- 181 válidos;
+- 2 quebrados;
+- 17 redirects/destinos para revisão;
+- 0 não testados;
+- 132 destinos externos fora do escopo;
+- título único aprovado e meta descriptions duplicadas sinalizadas;
+- axe e Impeccable concluídos no modo estático sanitizado;
+- capturas desktop e mobile produzidas;
+- Lighthouse ausente de scores/fontes.
 
-## 12. Encerramento da correção de interpretação (19/11/2026)
+No fluxo completo pela UI com `python programming` e `python documentation`, o Overview exibiu Technical SEO 79, chip de melhoria real, Review relevance vazio sem placeholder, prioridades High/Medium/Low e nenhuma mensagem visual de salvamento. A aba URLs confirmou 200 descobertos, 200 testados e 0 não testados.
 
-- O card **Technical SEO** mantém a fórmula ponderada existente e agora expõe a origem da nota. No teste real do Python.org, `79/100` corresponde a `9,5 de 12` pontos elegíveis, com as deduções de H1 e canonical mostradas como chips em **Missing or improve**.
-- **Review relevance** usa somente termos proeminentes do title/H1 que ficaram fora do nicho e das palavras-chave informadas. Os chips são candidatos determinísticos para revisão humana, não uma afirmação automática de que o termo prejudica SEO.
-- Links não visitados deixaram de produzir centenas de linhas `not_verified`. Os destinos continuam inventariados, mas aparecem como uma única limitação de cobertura. No teste real: `204` destinos, `17` registros diagnósticos e uma limitação agregada.
-- O worker isolado usa timeout de `110 s` para acomodar CPU do Render gratuito, preservando o limite HTTP de `120 s`, memória de `512 MB`, broker GET validado, bloqueio de sockets diretos e concorrência unitária.
-- Validação: `609` testes automatizados aprovados, smoke test Linux/Chromium em `512 MB`, revisão Impeccable sem achados e auditoria real do Python.org concluída no ambiente publicado.
+Exportação da mesma auditoria:
+
+- ZIP HTTP 200 com `report.html`, `report.json`, `findings.csv`, `screenshots/desktop.png` e `screenshots/mobile.png`;
+- JSON HTTP 200;
+- CSV HTTP 200.
+
+## 7. Limitações efetivas
+
+- O crawl não é infinito e pode deixar links como não testados ao atingir tempo/páginas/profundidade/quantidade ou robots.
+- Links externos não são verificados.
+- Navegação dinâmica por cliques não é exercitada; somente renderização e subrecursos GET seguros.
+- Conteúdo atrás de login, API privada, CAPTCHA ou ações de escrita está fora do escopo.
+- axe/Impeccable estáticos e screenshots não substituem teste humano completo.
+- Relevância semântica, termos “ruins”, volume de busca e ranking não são inferidos.
+
+## 8. Execução local
+
+```powershell
+# Terminal 1
+$env:PAGECHECK_ENV="local"
+$env:PAGECHECK_ALLOW_LIVE_FETCH="1"
+$env:PAGECHECK_ALLOW_LIVE_BROWSER="1"
+$env:PAGECHECK_ALLOW_LOCAL_STATIC_ENGINES="1"
+uv run uvicorn main:app --host 127.0.0.1 --port 8765
+```
+
+```powershell
+# Terminal 2
+$env:PAGECHECK_API_URL="http://127.0.0.1:8765"
+uv run streamlit run streamlit_app.py --server.address 127.0.0.1 --server.port 8501
+```
+
+## 9. Restrições de entrega preservadas
+
+- nenhum deploy executado;
+- Docker/Render/Neon não foram restaurados ou usados;
+- `docs/STAGE43_WINDOWS_BROKER_TEST_FIX.md` permanece não rastreado e não modificado.
+- a publicação Git inclui somente código, documentação e mídias públicas validadas; dados locais e relatórios operacionais continuam ignorados.

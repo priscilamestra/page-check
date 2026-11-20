@@ -16,7 +16,6 @@
   "type": "commonjs",
   "devDependencies": {
     "axe-core": "^4.14.0",
-    "impeccable": "^4.8.2",
-    "lighthouse": "^13.6.0"
+    "impeccable": "^4.8.2"
   }
 }

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections import Counter
 from collections.abc import Sequence
 from typing import Any
 
@@ -15,14 +14,6 @@ from bs4 import BeautifulSoup
 
 LANGUAGES = {"en": "English", "pt": "Portuguese", "es": "Spanish"}
 MAX_KEYWORDS = 8
-STOPWORDS = {
-    "en": {"about", "after", "also", "from", "have", "into", "more", "that", "their",
-           "these", "this", "with", "your", "the", "and", "for", "you"},
-    "pt": {"como", "mais", "para", "pela", "pelo", "sobre", "tambem", "uma", "das",
-           "dos", "que", "com", "seu", "sua"},
-    "es": {"como", "para", "sobre", "tambien", "una", "del", "las", "los", "que",
-           "con", "sus"},
-}
 
 
 def normalize_keywords(keywords: Sequence[str] | None) -> list[str]:
@@ -60,36 +51,35 @@ def _phrase_present(phrase: str, text: object) -> bool:
     return bool(re.search(rf"(?<!\w){needle}(?!\w)", _fold(text)))
 
 
-def _terms(value: object) -> list[tuple[str, str]]:
-    """Return display and comparison forms for meaningful word-like terms."""
-    result = []
-    for match in re.finditer(r"[^\W\d_]{4,}", str(value or ""), re.UNICODE):
-        raw = match.group(0)
-        result.append((raw, _fold(raw)))
-    return result
+def _content_areas(html: str, title: str, description: str) -> tuple[dict[str, str], bool]:
+    """Separate primary copy from repeated navigation/footer chrome."""
+    soup = BeautifulSoup(html, "html.parser")
+    headings = {
+        level: " ".join(tag.get_text(" ", strip=True) for tag in soup.find_all(level))
+        for level in ("h1", "h2", "h3")
+    }
+    anchors = " ".join(tag.get_text(" ", strip=True) for tag in soup.select("a[href]"))
+    image_alt = " ".join(str(tag.get("alt") or "") for tag in soup.find_all("img"))
+    has_scripts = bool(soup.find("script", src=True) or soup.find("script", string=True))
+    for tag in soup(["script", "style", "noscript", "template", "nav", "header", "footer",
+                     "aside", "form"]):
+        tag.decompose()
+    primary = soup.find("main") or soup.find("article") or soup.body or soup
+    main_content = " ".join(primary.get_text(" ", strip=True).split())
+    # An app shell with almost no reader-facing HTML cannot prove a keyword is absent.
+    partial = has_scripts and len(main_content.split()) < 20
+    return {
+        "title": title,
+        "description": description,
+        **headings,
+        "main_content": main_content,
+        "anchors": anchors,
+        "image_alt": image_alt,
+    }, partial
 
 
-def _relevance_candidates(*, title: str, h1: str, visible_copy: str,
-                          language: str, niche: str,
-                          keywords: Sequence[str]) -> list[dict[str, Any]]:
-    """Flag prominent terms outside the user's supplied SEO context for review."""
-    supplied = {folded for phrase in [niche, *keywords] for _, folded in _terms(phrase)}
-    stopwords = STOPWORDS[language]
-    visible_counts = Counter(folded for _, folded in _terms(visible_copy))
-    candidates: dict[str, dict[str, Any]] = {}
-    for location, text in (("title", title), ("h1", h1)):
-        for raw, folded in _terms(text):
-            if folded in supplied or folded in stopwords or folded in candidates:
-                if folded in candidates:
-                    candidates[folded]["locations"][location] = True
-                continue
-            candidates[folded] = {
-                "term": raw,
-                "locations": {"title": location == "title", "h1": location == "h1"},
-                "visible_occurrences": visible_counts[folded],
-                "reason": "Prominent in the title or H1 but outside the supplied niche and target terms.",
-            }
-    return list(candidates.values())[:5]
+def _examples(keyword: str, areas: dict[str, str]) -> dict[str, str]:
+    return {name: text[:240] for name, text in areas.items() if _phrase_present(keyword, text)}
 
 
 def _check(rule: str, status: str, title: str, observed: dict[str, Any],
@@ -134,33 +124,38 @@ def inspect_content_guidance(html: str, extracted: dict[str, Any], *,
 
     title = str(extracted.get("title") or "")
     description = str(extracted.get("meta_description") or "")
-    headings = extracted.get("headings") or []
-    h1 = " ".join(str(row.get("text") or "") for row in headings
-                  if isinstance(row, dict) and row.get("level") == "h1")
-    for tag in soup(["script", "style", "noscript", "template"]):
-        tag.decompose()
-    visible_copy = soup.body.get_text(" ", strip=True) if soup.body else soup.get_text(" ", strip=True)
+    areas, partial_html = _content_areas(html, title, description)
     for index, keyword in enumerate(phrases, 1):
-        where = {
-            "title": _phrase_present(keyword, title),
-            "description": _phrase_present(keyword, description),
-            "h1": _phrase_present(keyword, h1),
-            "visible_copy": _phrase_present(keyword, visible_copy),
-        }
-        prominent = any(where[field] for field in ("title", "description", "h1"))
-        status = "passed" if prominent else "warning"
+        where = {name: _phrase_present(keyword, text) for name, text in areas.items()}
+        prominent = any(where[field] for field in ("title", "description", "h1", "h2", "h3"))
+        anywhere = any(where.values())
+        if prominent:
+            status, title_text, recommendation = (
+                "passed", "Target keyword found in prominent page content", ""
+            )
+        elif anywhere:
+            status, title_text, recommendation = (
+                "warning", "Target keyword is only present outside prominent content",
+                "Use the phrase naturally in a relevant title, description, or heading when it matches the page intent.",
+            )
+        elif partial_html:
+            status, title_text, recommendation = (
+                "not_verified", "Target keyword absence could not be confirmed",
+                "Review rendered content because the fetched HTML appears to be a partial application shell.",
+            )
+        else:
+            status, title_text, recommendation = (
+                "warning", "Target keyword not observed in accessible page content",
+                "Confirm the phrase matches the page intent, then add it naturally to relevant copy.",
+            )
         checks.append(_check(f"SEO_TARGET_KEYWORD_{index}", status,
-            "Target keyword found in key page elements" if prominent else
-            "Target keyword not found in key page elements",
-            {"keyword": keyword, "locations": where, "selected_language": language},
-            "Review whether this phrase belongs naturally in the title, description, or H1; avoid keyword stuffing."
-            if not prominent else "", "low" if not prominent else "info"))
+            title_text,
+            {"keyword": keyword, "locations": where, "examples": _examples(keyword, areas),
+             "selected_language": language, "partial_html": partial_html},
+            recommendation, "low" if status == "warning" else "info"))
     # Niche is broad context only. An unmatched niche is NOT proof of bad SEO:
     # synonyms, abbreviations and category names require semantic interpretation.
-    niche_locations = {"title": _phrase_present(niche, title),
-                       "description": _phrase_present(niche, description),
-                       "h1": _phrase_present(niche, h1),
-                       "visible_copy": _phrase_present(niche, visible_copy)}
+    niche_locations = {name: _phrase_present(niche, text) for name, text in areas.items()}
     niche_observed = any(niche_locations.values())
     checks.append(_check("SEO_NICHE_CONTEXT",
         "passed" if niche_observed else "not_verified",
@@ -168,11 +163,9 @@ def inspect_content_guidance(html: str, extracted: dict[str, Any], *,
         {"niche": niche, "locations": niche_locations, "selected_language": language},
         "The niche may be described with synonyms; use target keywords and review the page manually."
         if not niche_observed else ""))
-    relevance_candidates = _relevance_candidates(
-        title=title, h1=h1, visible_copy=visible_copy, language=language,
-        niche=niche, keywords=phrases,
-    )
     return {"language": language, "niche": niche, "keywords": phrases,
-            "checks": checks, "relevance_candidates": relevance_candidates,
+            "checks": checks, "relevance_candidates": [],
+            "extraction": {"areas": sorted(areas), "partial_html": partial_html},
             "limitations": ["Context checks rely on exact words or phrases with accent-insensitive matching.",
+                            "Navigation, headers, footers, sidebars and forms are excluded from main content.",
                             "No external keyword research, search volume, ranking, or semantic AI analysis was performed."]}

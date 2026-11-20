@@ -7,18 +7,24 @@ from pathlib import Path
 import httpx
 import streamlit as st
 
+from pagecheck.common.security.deployment import production_scan_configured
+from pagecheck.ui.browser_recovery import browser_recovery
 from pagecheck.ui.components.report_data import (
-    OBJECTIVE_LABELS, parse_uploaded_report, validate_report,
+    OBJECTIVE_LABELS,
+    parse_uploaded_report,
+    validate_report,
 )
 from pagecheck.ui.components.report_view import render_report
-from pagecheck.ui.idle_guard import enable_idle_guard
-from pagecheck.ui.browser_recovery import browser_recovery
-from pagecheck.ui.temporary_client import (
-    TemporaryRecoveryUnavailable, save_temporary, restore_temporary,
-)
-from pagecheck.common.security.deployment import production_scan_configured
 from pagecheck.ui.history_resume import (
-    clear_active_audit, remember_active_audit, resume_active_audit,
+    clear_active_audit,
+    remember_active_audit,
+    resume_active_audit,
+)
+from pagecheck.ui.idle_guard import enable_idle_guard
+from pagecheck.ui.temporary_client import (
+    TemporaryRecoveryUnavailable,
+    restore_temporary,
+    save_temporary,
 )
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -132,15 +138,14 @@ def render_app() -> None:
     with heading:
         st.title("Page Check")
         st.caption("Technical, SEO, and conversion-readiness audits · No generative AI")
-    with tools:
-        # Keep operational diagnostics internal: the user only needs to know
-        # whether the auditing API can be reached.
-        with st.popover("Tools", icon=":material/tune:"):
-            st.markdown("**Connection**")
-            if _api_health(api_url):
-                st.badge("FastAPI connected", color="green")
-            else:
-                st.badge("FastAPI disconnected", color="gray")
+    # Keep operational diagnostics internal: the user only needs to know
+    # whether the auditing API can be reached.
+    with tools, st.popover("Tools", icon=":material/tune:"):
+        st.markdown("**Connection**")
+        if _api_health(api_url):
+            st.badge("FastAPI connected", color="green")
+        else:
+            st.badge("FastAPI disconnected", color="gray")
 
     st.subheader("New audit")
     scans_unavailable = is_production and not production_scan_configured()
@@ -204,9 +209,7 @@ def render_app() -> None:
                             st.session_state["pagecheck_report"] = validate_report(restored)
                             st.session_state["pagecheck_recovery_token"] = token
                             st.session_state["pagecheck_browser_set"] = token
-                            st.session_state["pagecheck_history_notice"] = (
-                                "Audit recoverable for 24 hours on this browser."
-                            )
+                            st.session_state.pop("pagecheck_history_notice", None)
                             st.rerun()
                         except (TemporaryRecoveryUnavailable, ValueError, KeyError):
                             st.session_state["pagecheck_history_notice"] = (
@@ -217,9 +220,7 @@ def render_app() -> None:
                         try:
                             saved_id = _save_history(api_url, st.session_state["pagecheck_report"])
                             remember_active_audit(st.session_state, st.query_params, saved_id)
-                            st.session_state["pagecheck_history_notice"] = (
-                                f"Audit saved to local history ({saved_id[:8]})."
-                            )
+                            st.session_state.pop("pagecheck_history_notice", None)
                         except ValueError as exc:
                             st.session_state["pagecheck_history_notice"] = str(exc)
                 except ValueError as exc:
@@ -244,9 +245,7 @@ def render_app() -> None:
                 st.error(str(exc))
 
     notice = st.session_state.get("pagecheck_history_notice")
-    if notice and not (
-        use_postgres and notice == "Audit recoverable for 24 hours on this browser."
-    ):
+    if notice:
         st.caption(notice)
 
     report = st.session_state.get("pagecheck_report")

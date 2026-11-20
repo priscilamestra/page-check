@@ -1,9 +1,12 @@
 """Stage 27: report integrity and concise, non-duplicated overview."""
-from pagecheck.acquisition.browser.visual_hierarchy import assess_heading_hierarchy, make_design_review
+from pagecheck.acquisition.browser.visual_hierarchy import (
+    assess_heading_hierarchy,
+    make_design_review,
+)
 from pagecheck.application.use_cases.consolidate_audit import consolidate_audit
-from pagecheck.ui.components.overview_insights import prioritized_unique_findings
-from pagecheck.ui.components.overview_dashboard import findings_html
 from pagecheck.ui.components.hierarchy_indicator import design_analysis_available
+from pagecheck.ui.components.overview_dashboard import findings_html
+from pagecheck.ui.components.overview_insights import prioritized_unique_findings
 
 
 def _issue(number, *, title=None, module="images", severity="low"):
@@ -37,6 +40,18 @@ def test_overview_aggregates_repeated_image_symptoms_without_deleting_details():
     assert "3 occurrences" in rendered
     assert rendered.count("Image missing in audit screenshot") == 1
     assert len(rows) == 4  # backend audit evidence remains intact
+
+
+def test_priority_tags_use_only_approved_severity_labels():
+    rendered = findings_html([
+        {"title": "Critical", "severity": "critical"},
+        {"title": "Review", "severity": "medium"},
+        {"title": "Info", "severity": "info"},
+    ])
+    assert ">High<" in rendered
+    assert ">Medium<" in rendered
+    assert ">Low<" in rendered
+    assert "Needs review" not in rendered
 
 
 def test_design_review_is_retained_by_report_consolidation():

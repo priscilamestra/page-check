@@ -13,7 +13,6 @@ from pagecheck.ui.components.overview_insights import (
     missing_evidence_rows,
     prioritized_findings,
     seo_keyword_groups,
-    seo_score_explanation,
     source_counts,
 )
 
@@ -39,8 +38,7 @@ def hubspot_like_report():
         ],
         "source_states": {"seo": "completed", "conversion": "completed", "visuals": {
             "desktop": "partial", "mobile": "partial"}, "engines": {
-            "axe": "completed", "impeccable": "not_verified",
-            "lighthouse": "not_verified"}},
+            "axe": "completed", "impeccable": "not_verified"}},
     }
 
 
@@ -68,7 +66,7 @@ def test_unverified_chart_is_distinct_from_findings():
 
 def test_coverage_sources_are_not_individual_checks():
     assert source_counts(hubspot_like_report()) == {
-        "completed": 3, "partial": 2, "not_verified": 2}
+        "completed": 3, "partial": 2, "not_verified": 1}
 
 
 def test_priorities_are_sorted_even_for_older_unsorted_reports():
@@ -160,13 +158,13 @@ def test_count_labels(value, singular, expected):
 def test_old_source_states_stay_not_verified():
     report = {"source_states": {"seo": "completed", "conversion": "not_verified",
                                 "visuals": {}, "engines": {}}}
-    assert source_counts(report) == {"completed": 1, "partial": 0, "not_verified": 6}
+    assert source_counts(report) == {"completed": 1, "partial": 0, "not_verified": 5}
 
 
 def test_coverage_chart_has_three_separate_labeled_bars():
     html = coverage_bars_html(source_counts(hubspot_like_report()))
-    assert "3 / 7 sources" in html
-    assert "2 / 7 sources" in html
+    assert "3 / 6 sources" in html
+    assert "2 / 6 sources" in html
     assert html.count("<div style=\"height:11px;") == 3
     assert "Completed" in html and "Limited" in html and "Not verified" in html
 
@@ -189,25 +187,13 @@ def test_keyword_groups_use_only_recorded_seo_evidence():
          "evidence": {"keyword": "sales ops", "locations": {"visible_copy": False}}},
         {"check_id": "SEO_TARGET_KEYWORD_3", "status": "passed",
          "evidence": {"keyword": "crm", "locations": {"title": True}}},
-    ], "scores": {"internal": {"seo": {"breakdown": {
-        "points_earned": 9.5, "points_possible": 12,
-        "deductions": [{"check_id": "SEO_CANONICAL", "points_lost": 1,
-                        "weight": 2}],
-    }}}}, "seo_content_guidance": {"relevance_candidates": [{
-        "term": "Welcome", "reason": "Prominent outside supplied terms",
-    }]}}
+    ]}
     groups = seo_keyword_groups(report)
     assert groups["missing_or_improve"] == [
-        {"term": "automation", "reason": "Improve prominence"},
-        {"term": "sales ops", "reason": "Missing from page copy"},
-        {"term": "Canonical URL", "reason": "1 of 2 weighted points lost"},
+        {"term": "automation"},
+        {"term": "sales ops"},
     ]
-    assert groups["review_relevance"] == [
-        {"term": "Welcome", "reason": "Prominent outside supplied terms"},
-    ]
-    assert seo_score_explanation(report) == (
-        "Technical SEO score: 9.5 of 12 eligible weighted points earned."
-    )
+    assert groups["review_relevance"] == []
 
 
 def test_keyword_groups_do_not_invent_relevance_without_evidence():

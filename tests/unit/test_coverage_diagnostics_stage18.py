@@ -3,11 +3,13 @@ import io
 import zipfile
 from types import SimpleNamespace
 
-from pagecheck.ui.components.coverage_details import (
-    not_verified_by_area, screenshot_kind, source_rows,
-)
 from pagecheck.integrations.cli_runner import run_local_json_command
 from pagecheck.reporting.exports.bundle import zip_export
+from pagecheck.ui.components.coverage_details import (
+    not_verified_by_area,
+    screenshot_kind,
+    source_rows,
+)
 from pagecheck.ui.components.report_data import screenshot_entries
 
 
@@ -23,8 +25,7 @@ def minimal_report():
         "checks": [], "findings": [], "actions_by_team": [],
         "source_states": {"seo": "completed", "conversion": "completed",
                           "visuals": {"desktop": "not_verified", "mobile": "not_verified"},
-                          "engines": {"axe": "completed", "impeccable": "not_verified",
-                                      "lighthouse": "not_verified"}},
+                          "engines": {"axe": "completed", "impeccable": "not_verified"}},
         "visual_capture": {"status": "partial", "errors": {
             "desktop": "The guarded navigation timed out.",
             "mobile": "The page exceeded safe document height.",
@@ -32,7 +33,6 @@ def minimal_report():
         "engine_limitations": {
             "axe": ["Old source note", "Static HTML only; no runtime behavior."],
             "impeccable": ["Local detector exited with code 1."],
-            "lighthouse": ["Not run on public URLs."],
         },
         "screenshots": {},
     }
@@ -43,7 +43,6 @@ def test_hubspot_like_sources_are_labelled_without_inventing_success():
     assert rows["seo"]["status_label"] == "Completed"
     assert rows["axe"]["status_label"] == "Completed"
     assert rows["impeccable"]["status_label"] == "Not verified"
-    assert rows["lighthouse"]["status_label"] == "Not verified"
     assert "exited with code 1" in rows["impeccable"]["reason"]
 
 
@@ -70,7 +69,7 @@ def test_old_report_without_reasons_still_renders():
     report.pop("engine_limitations")
     report.pop("visual_capture")
     rows = source_rows(report)
-    assert len(rows) == 7
+    assert len(rows) == 6
     assert any("did not produce a confirmed result" in x["reason"] for x in rows)
 
 
