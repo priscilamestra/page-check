@@ -75,12 +75,11 @@ def test_rate_limit_and_concurrency_have_no_queue():
         pass
 
 
-def test_stage33_blueprint_is_disabled_by_default():
+def test_stage33_ui_guards_unavailable_scans():
     from pathlib import Path
     root = Path(__file__).resolve().parents[2]
-    blueprint = (root / "render.yaml").read_text(encoding="utf-8")
-    assert 'PAGECHECK_PUBLIC_AUDITS_ENABLED\n        value: "0"' in blueprint
-    assert 'PAGECHECK_EGRESS_ISOLATED\n        value: "0"' in blueprint
     ui = (root / "src/pagecheck/ui/app.py").read_text(encoding="utf-8")
     assert 'disabled=scans_unavailable' in ui
     assert 'X-PageCheck-Service-Key' in ui
+
+

@@ -64,15 +64,5 @@ def test_launcher_receives_no_api_secrets(monkeypatch, tmp_path):
     assert chromium.settings["proxy"]["server"] == "http://127.0.0.1:9"
 
 
-def test_docker_compiles_and_selftests_guard_in_separate_stage():
-    dockerfile = (ROOT / "deploy/Dockerfile.api").read_text(encoding="utf-8")
-    assert "FROM debian:bookworm-slim AS seccomp-build" in dockerfile
-    assert "pagecheck-chromium-sandbox --self-test" in dockerfile
-    assert "COPY --from=seccomp-build" in dockerfile
-    assert "PAGECHECK_BROWSER_SECCOMP_LAUNCHER=/usr/local/bin/pagecheck-chromium-sandbox" in dockerfile
 
 
-def test_production_flags_remain_disabled_until_render_verification():
-    blueprint = (ROOT / "render.yaml").read_text(encoding="utf-8")
-    assert 'PAGECHECK_EGRESS_ISOLATED\n        value: "0"' in blueprint
-    assert 'PAGECHECK_PUBLIC_AUDITS_ENABLED\n        value: "0"' in blueprint

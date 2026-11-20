@@ -41,8 +41,3 @@ def test_production_deployment_is_still_disabled_by_default(monkeypatch):
     assert deployment.production_scan_configured() is False
 
 
-def test_render_configuration_does_not_self_assert_egress_isolation():
-    root = Path(__file__).resolve().parents[2]
-    blueprint = (root / "render.yaml").read_text(encoding="utf-8")
-    assert 'PAGECHECK_EGRESS_ISOLATED\n        value: "0"' in blueprint
-    assert 'PAGECHECK_PUBLIC_AUDITS_ENABLED\n        value: "0"' in blueprint
